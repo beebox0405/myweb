@@ -301,6 +301,7 @@
             <div style="display: flex; justify-content: space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
                 <h3>员工列表 · Employee List</h3>
                 <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary btn-sm" id="syncDataBtn">🔄 同步员工数据</button>
                     <button class="btn btn-primary btn-sm" id="exportExcelBtn">📎 下载数据</button>
                     <button class="btn btn-primary btn-sm" id="addEmployeeBtn">➕ 新增员工</button>
                 </div>
@@ -343,7 +344,7 @@
     const leaveRecordsCollection = db.collection("leaveRecords");
     const leaveRequestsCollection = db.collection("leaveRequests");
 
-    // ==================== 辅助函数 ====================
+    // 辅助函数
     function genId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 6); }
     function escapeHtml(str){ if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
     function readFileAsBase64(file) {
@@ -355,14 +356,14 @@
         });
     }
 
-    // ==================== 周末天数计算（周日0天，周六0.5天） ====================
+    // 周末天数计算（周日0天，周六0.5天）
     function calculateWorkDays(startDateStr, endDateStr) {
         let start = new Date(startDateStr);
         let end = new Date(endDateStr);
         let days = 0;
         let current = new Date(start);
         while (current <= end) {
-            const dayOfWeek = current.getDay(); // 0=周日, 6=周六
+            const dayOfWeek = current.getDay();
             if (dayOfWeek === 0) {
                 // 周日不计
             } else if (dayOfWeek === 6) {
@@ -375,7 +376,7 @@
         return days;
     }
 
-    // ==================== 年假计算函数（MOM规则） ====================
+    // 年假计算（MOM 官方规则）
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
@@ -443,7 +444,7 @@
         else return Math.floor(total);
     }
 
-    // ==================== 数据操作 ====================
+    // 数据操作
     async function loadEmployees() { const snap = await employeesCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveEmployee(emp) { await employeesCollection.doc(emp.id).set(emp); }
     async function deleteEmployeeFirestore(empId) { await employeesCollection.doc(empId).delete(); }
@@ -468,7 +469,7 @@
         return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear).reduce((sum, r) => sum + r.days, 0);
     }
 
-    // ==================== 渲染员工假期卡片（复用） ====================
+    // 渲染员工假期卡片（员工/审批人共用）
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
@@ -531,7 +532,7 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
     }
 
-    // ==================== 提交申请模态框（自动计算周末天数） ====================
+    // 提交申请模态框
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         modal.innerHTML = `
@@ -596,7 +597,6 @@
         document.getElementById('downloadFormBtn').onclick = () => openLeaveForm(emp);
     }
 
-    // 打印表格窗口
     function openLeaveForm(emp) {
         const win = window.open('', '_blank');
         win.document.write(`
@@ -627,7 +627,7 @@
         win.document.close();
     }
 
-    // ==================== 审批相关 ====================
+    // 审批相关函数
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -776,7 +776,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理员添加/编辑休假记录（支持自动计算周末天数）
+    // 管理员编辑、休假记录管理
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -846,7 +846,7 @@
         attachEvents();
     };
 
-    // ==================== 视图切换 ====================
+    // 视图切换
     let currentUser = null;
     async function showEmployeeView(emp) {
         document.getElementById('loginView').classList.add('hidden');
@@ -1040,51 +1040,86 @@
         XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
     }
 
-    // ==================== 初始化默认数据（导入Excel员工） ====================
-    async function initDefaultData() {
-        const emps = await loadEmployees();
-        if (emps.length === 0) {
-            const defaultEmployeeList = [
-                { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-                { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
-                { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
-                { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
-            ];
-            for (let emp of defaultEmployeeList) {
-                await saveEmployee(emp);
-            }
-            // 可选添加一些示例休假记录，但保持简洁，不自动添加
+    // 强制同步完整员工数据（管理员点击按钮时调用）
+    async function syncFullEmployeeData() {
+        if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
+        // 完整员工列表（共21人）
+        const fullList = [
+            { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
+            { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
+            { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
+        ];
+        // 清空所有集合
+        const allEmps = await employeesCollection.get();
+        for (const doc of allEmps.docs) await doc.ref.delete();
+        const allRecords = await leaveRecordsCollection.get();
+        for (const doc of allRecords.docs) await doc.ref.delete();
+        const allReqs = await leaveRequestsCollection.get();
+        for (const doc of allReqs.docs) await doc.ref.delete();
+        // 导入完整员工
+        for (let emp of fullList) {
+            await saveEmployee(emp);
         }
-        await checkSession();
+        // 可选导入示例休假记录（保留182M和S1667227J的记录）
+        const sampleRecords = [
+            { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "sick", date: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
+        ];
+        for (let rec of sampleRecords) {
+            await leaveRecordsCollection.doc(rec.id).set(rec);
+        }
+        alert("数据同步完成！共导入 " + fullList.length + " 名员工。");
+        // 刷新当前管理员视图
+        if (sessionStorage.getItem('currentAdmin')) {
+            await renderAdminTable();
+            await renderPendingAndHistory();
+        } else {
+            window.location.reload();
+        }
     }
 
+    // 事件绑定
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
     document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
     document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
     document.getElementById('adminLogoutBtn')?.addEventListener('click', logout);
     document.getElementById('addEmployeeBtn')?.addEventListener('click', addEmployee);
     document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
+    document.getElementById('syncDataBtn')?.addEventListener('click', syncFullEmployeeData);
     document.getElementById('pwdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
     document.getElementById('empIdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
 
-    initDefaultData();
+    // 启动时检查数据完整性，如不完整则自动同步
+    (async function autoCheckAndSync() {
+        const emps = await loadEmployees();
+        if (emps.length < 20) {
+            console.log("检测到员工数据不足，自动同步完整数据...");
+            await syncFullEmployeeData();
+        } else {
+            await checkSession();
+        }
+    })();
 </script>
 </body>
 </html>
