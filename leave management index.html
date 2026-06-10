@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>假期管理系统 · 新加坡人力部规则 · 审批权限 + 申请表格下载</title>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+        }
+        body {
+            background: linear-gradient(145deg, #eef2f7 0%, #d4e0ec 100%);
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .card {
+            background: white;
+            border-radius: 40px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.2);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+        .card-header {
+            background: #0a2b3e;
+            color: white;
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .header-left h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        .header-left p {
+            opacity: 0.8;
+            margin-top: 4px;
+            font-size: 0.8rem;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .company-logo {
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(4px);
+            padding: 6px 16px;
+            border-radius: 40px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid rgba(255,255,255,0.3);
+            white-space: nowrap;
+        }
+        .company-logo::before {
+            content: "📦";
+            font-size: 1.1rem;
+        }
+        .current-date {
+            background: rgba(255,255,255,0.1);
+            padding: 6px 14px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            font-family: monospace;
+            letter-spacing: 0.5px;
+        }
+        .btn {
+            background: #0a2b3e;
+            color: white;
+            border: none;
+            padding: 8px 18px;
+            border-radius: 40px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+            font-size: 0.85rem;
+        }
+        .btn-primary {
+            background: #1d5b8e;
+        }
+        .btn-primary:hover { background: #0f466b; }
+        .btn-danger {
+            background: #b13e3e;
+        }
+        .btn-danger:hover { background: #8e2e2e; }
+        .btn-secondary {
+            background: #6c8eae;
+        }
+        .btn-success {
+            background: #2e7d32;
+        }
+        .btn-success:hover { background: #1b5e20; }
+        .btn-sm {
+            padding: 4px 12px;
+            font-size: 0.75rem;
+        }
+        .error-msg {
+            background: #fff4ea;
+            color: #c26b2e;
+            padding: 12px 20px;
+            border-radius: 40px;
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        .info-panel {
+            background: #f8fafd;
+            border-radius: 32px;
+            padding: 28px;
+            margin-bottom: 24px;
+        }
+        .user-greeting {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 2px solid #e0ecf5;
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .avatar {
+            background: #1d5b8e;
+            width: 70px;
+            height: 70px;
+            border-radius: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2rem;
+            font-weight: bold;
+            color: white;
+        }
+        .stats-grid {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 28px;
+        }
+        .stat-card {
+            flex: 1;
+            background: white;
+            border-radius: 24px;
+            padding: 18px;
+            text-align: center;
+            border: 1px solid #e6f0f8;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+        }
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #1e5a7a;
+        }
+        .stat-label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #2c4b6e;
+        }
+        .leave-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            border: 1px solid #cfdfed;
+        }
+        .leave-table th, .leave-table td {
+            border: 1px solid #cfdfed;
+            padding: 10px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        .leave-table th {
+            background: #eef4fa;
+            font-weight: 700;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            max-width: 650px;
+            width: 90%;
+            border-radius: 32px;
+            padding: 24px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #cfdfed;
+            border-radius: 28px;
+        }
+        .attachment-link {
+            color: #1d5b8e;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        .download-form-btn {
+            margin-top: 10px;
+            background: #f0f0f0;
+            color: #1d5b8e;
+            border: 1px solid #cfdfed;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        @media (max-width: 700px) {
+            .card-header { flex-direction: column; align-items: flex-start; }
+            .header-right { align-self: flex-end; }
+            .stats-grid { flex-direction: column; }
+        }
+        /* 打印样式 */
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            .printable-form, .printable-form * {
+                visibility: visible;
+            }
+            .printable-form {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="container" id="app">
+    <!-- 登录视图 -->
+    <div id="loginView" class="card">
+        <div class="card-header">
+            <div class="header-left"><h1>🏝️ 假期管理系统 · Leave Management</h1><p>工号 + 密码登录 | 新加坡人力部规则 | 审批权限</p></div>
+            <div class="header-right"><div class="current-date" id="loginCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div></div>
+        </div>
+        <div class="card-body">
+            <div id="loginError" class="error-msg hidden"></div>
+            <div class="form-group"><label>👤 工号 / Employee ID</label><input type="text" id="empIdInput" autocomplete="off"></div>
+            <div class="form-group"><label>🔒 密码 / Password</label><input type="password" id="pwdInput"></div>
+            <button class="btn btn-primary" id="doLoginBtn">登录 / Login</button>
+        </div>
+    </div>
+
+    <!-- 员工视图 -->
+    <div id="employeeView" class="card hidden">
+        <div class="card-header"><div class="header-left"><h1>🏝️ 我的假期 · My Leave</h1><p>年假 & 病假 & 无薪假明细记录 | 可提交申请</p></div>
+        <div class="header-right"><div class="current-date" id="empCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div><button class="btn btn-secondary btn-sm" id="empLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-body" id="employeeContent"></div>
+    </div>
+
+    <!-- 审批人视图 -->
+    <div id="approverView" class="card hidden">
+        <div class="card-header"><div class="header-left"><h1>👥 审批面板 · Approver Panel</h1><p>待审批申请 & 审批历史 | 我的假期</p></div>
+        <div class="header-right"><div class="current-date" id="approverCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div><button class="btn btn-secondary btn-sm" id="approverLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-body" id="approverContent"></div>
+    </div>
+
+    <!-- 管理员视图 -->
+    <div id="adminView" class="card hidden">
+        <div class="card-header"><div class="header-left"><h1>👑 管理员面板 · Admin Panel</h1><p>管理员工、休假记录、审批申请、附件</p></div>
+        <div class="header-right"><div class="current-date" id="adminCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div><button class="btn btn-secondary btn-sm" id="adminLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-body">
+            <div style="display: flex; justify-content: space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
+                <h3>员工列表 · Employee List</h3>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-primary btn-sm" id="exportExcelBtn">📎 下载数据</button>
+                    <button class="btn btn-primary btn-sm" id="addEmployeeBtn">➕ 新增员工</button>
+                </div>
+            </div>
+            <div id="adminTableContainer"></div>
+            <div style="margin-top: 32px;"><h3>📋 待审批申请 · Pending Requests</h3><div id="pendingRequestsContainer"></div></div>
+            <div style="margin-top: 32px;"><h3>📜 审批历史 · Approval History</h3><div id="approvalHistoryContainer"></div></div>
+            <div style="margin-top: 32px;"><h4>📋 年假计算规则 (新加坡人力部)</h4>
+                <table class="rule-table"><thead><tr><th>服务年限</th><th>年假天数</th></tr></thead><tbody>
+                <tr><td>第1年</td><td>7</td></tr><tr><td>第2年</td><td>8</td></tr><tr><td>第3年</td><td>9</td></tr>
+                <tr><td>第4年</td><td>10</td></tr><tr><td>第5年</td><td>11</td></tr><tr><td>第6年</td><td>12</td></tr>
+                <tr><td>第7年</td><td>13</td></tr><tr><td>第8年及以上</td><td>14</td></tr>
+                </tbody></table>
+                <p style="margin-top:12px;">✔ 按比例计算: (当前工作年已完成的<strong>完整月数</strong> ÷ 12) × 当年应得年假基数，四舍五入到整天。<br>✔ 员工可提交申请，审批人批准后自动扣除假期。审批记录会显示审批人姓名。<br>✔ 管理员可在审批历史中删除记录（同时删除对应的休假记录）。</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ---------- 存储 ----------
+    const STORAGE_EMPLOYEES = "leave_employees_v3";
+    const STORAGE_LEAVE_RECORDS = "leave_records_v3";
+    const STORAGE_LEAVE_REQUESTS = "leave_requests_v3";
+
+    // ==================== 新的员工列表（移除1001/1002/1003，加入Excel数据） ====================
+    // 保留 admin, 182M, S1667227J，其余从Excel导入
+    // Excel原始数据（根据提供的表格）
+    const excelEmployeesRaw = [
+        { id: "S1328764C", name: "Alan Tan Tiong Sing", startDate: "2018-08-17" },
+        { id: "G7768030L", name: "Lee Wee boon", startDate: "2020-04-07" },
+        { id: "S6849634I", name: "Ho Siak Kwang", startDate: "2020-08-20" },
+        { id: "G5194592T", name: "Saw Myaing Win", startDate: "2021-09-13" },
+        { id: "G2877968U", name: "Chua Kai Loon", startDate: "2022-07-01" },
+        { id: "G2720866K", name: "Zhang Yun Long", startDate: "2022-10-03" },
+        { id: "S1507617H", name: "Hussain Bin Masjuni", startDate: "2023-10-02" },
+        { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", startDate: "2023-11-27" },
+        { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", startDate: "2024-09-16" },
+        { id: "G3464967M", name: "ZHANG YINAN", startDate: "2025-04-30" },
+        { id: "G2963634L", name: "Mahatevan Vyraperumal", startDate: "2025-08-26" },
+        { id: "G3406526N", name: "Saw Than Htay Zaw", startDate: "2025-12-08" },
+        { id: "M3603017P", name: "Cui Liang", startDate: "2026-03-09" },
+        { id: "G8750811R", name: "Preetep P Kumar", startDate: "2026-03-02" },
+        { id: "EMP_001", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", startDate: "2026-03-16" },  // 缺失工号，临时生成
+        { id: "S7163534A", name: "TAN LI JUNK", startDate: "2025-09-01" },
+        { id: "EMP_002", name: "Siti Nor Faezah Binte Abdullah", startDate: "2025-07-16" },   // 缺失工号，临时生成
+        { id: "G6979510U", name: "Chen Chin Leong", startDate: "2025-07-28" }
+    ];
+
+    // 构建完整员工对象：默认密码123456，病假总额14，上年结转0，无审批权限，部门可根据需要后续编辑
+    const newEmployees = excelEmployeesRaw.map(emp => ({
+        id: emp.id,
+        name: emp.name,
+        department: "待填写 / To be filled",
+        password: "123456",
+        role: "user",
+        startDate: emp.startDate,
+        sickTotal: 14,
+        carryOverDays: 0,
+        isApprover: false
+    }));
+
+    // 添加原有的特殊员工（182M 和 S1667227J），其中182M为审批人，S1667227J为普通员工
+    const extraEmployees = [
+        { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
+        { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
+        { id: "admin", name: "管理员 / Administrator", department: "系统管理 / System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
+    ];
+
+    const defaultEmployees = [...newEmployees, ...extraEmployees];
+
+    // 仅保留与 182M 和 S1667227J 相关的初始休假记录，其他员工无初始记录
+    const defaultRecords = [
+        { id: "rec10", empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null },
+        { id: "rec11", empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null },
+        { id: "rec12", empId: "S1667227J", type: "annual", date: "2025-04-01", days: 4, attachment: null, attachmentName: null },
+        { id: "rec13", empId: "S1667227J", type: "annual", date: "2025-09-15", days: 2, attachment: null, attachmentName: null },
+        { id: "rec14", empId: "S1667227J", type: "sick", date: "2025-11-05", days: 2, attachment: null, attachmentName: null }
+    ];
+
+    const defaultRequests = [];
+
+    function initData() {
+        if (!localStorage.getItem(STORAGE_EMPLOYEES)) localStorage.setItem(STORAGE_EMPLOYEES, JSON.stringify(defaultEmployees));
+        if (!localStorage.getItem(STORAGE_LEAVE_RECORDS)) localStorage.setItem(STORAGE_LEAVE_RECORDS, JSON.stringify(defaultRecords));
+        if (!localStorage.getItem(STORAGE_LEAVE_REQUESTS)) localStorage.setItem(STORAGE_LEAVE_REQUESTS, JSON.stringify(defaultRequests));
+    }
+    function getEmployees() { return JSON.parse(localStorage.getItem(STORAGE_EMPLOYEES)); }
+    function saveEmployees(emps) { localStorage.setItem(STORAGE_EMPLOYEES, JSON.stringify(emps)); }
+    function getLeaveRecords() { return JSON.parse(localStorage.getItem(STORAGE_LEAVE_RECORDS)); }
+    function saveLeaveRecords(records) { localStorage.setItem(STORAGE_LEAVE_RECORDS, JSON.stringify(records)); }
+    function getLeaveRequests() { return JSON.parse(localStorage.getItem(STORAGE_LEAVE_REQUESTS)); }
+    function saveLeaveRequests(requests) { localStorage.setItem(STORAGE_LEAVE_REQUESTS, JSON.stringify(requests)); }
+    function genId() { return Date.now() + '-' + Math.random().toString(36).substr(2, 6); }
+
+    // --- 年假计算函数 (MOM官方) ---
+    function getLastDayOfMonth(date = new Date()) { return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59); }
+    function getServiceYearInfo(startDateStr, referenceDate = new Date()) {
+        if (!startDateStr) return { yearIndex: 0, currentYearStart: null };
+        const start = new Date(startDateStr);
+        const lastDay = getLastDayOfMonth(referenceDate);
+        if (lastDay < start) return { yearIndex: 0, currentYearStart: null };
+        let anniversaries = 0;
+        let temp = new Date(start);
+        while (true) {
+            let next = new Date(temp);
+            next.setFullYear(temp.getFullYear() + 1);
+            if (next <= lastDay) { anniversaries++; temp = next; }
+            else break;
+        }
+        const currentYearStart = new Date(start);
+        currentYearStart.setFullYear(start.getFullYear() + anniversaries);
+        const yearIndex = anniversaries + 1;
+        return { yearIndex, currentYearStart };
+    }
+    function getCompletedMonthsInCurrentYear(startDateStr, referenceDate = new Date()) {
+        const { currentYearStart } = getServiceYearInfo(startDateStr, referenceDate);
+        if (!currentYearStart) return 0;
+        const lastDay = getLastDayOfMonth(referenceDate);
+        if (lastDay < currentYearStart) return 0;
+        let completedMonths = 0;
+        let tempDate = new Date(currentYearStart);
+        while (true) {
+            let nextMonth = new Date(tempDate);
+            nextMonth.setMonth(tempDate.getMonth() + 1);
+            if (nextMonth <= lastDay) { completedMonths++; tempDate = nextMonth; }
+            else break;
+        }
+        return completedMonths;
+    }
+    function getBaseAnnualLeave(yearIndex) {
+        if (yearIndex <= 0) return 0;
+        if (yearIndex <= 7) return [0,7,8,9,10,11,12,13][yearIndex];
+        return 14;
+    }
+    function getCurrentYearEntitlement(startDateStr) {
+        if (!startDateStr) return 0;
+        const start = new Date(startDateStr);
+        const today = new Date();
+        const lastDay = getLastDayOfMonth(today);
+        const totalMonths = (lastDay.getFullYear() - start.getFullYear()) * 12 + (lastDay.getMonth() - start.getMonth());
+        if (totalMonths < 3) return 0;
+        const { yearIndex } = getServiceYearInfo(startDateStr, today);
+        if (yearIndex <= 0) return 0;
+        const baseDays = getBaseAnnualLeave(yearIndex);
+        const completedMonths = getCompletedMonthsInCurrentYear(startDateStr, today);
+        if (completedMonths >= 12) return baseDays;
+        let proRated = (completedMonths / 12) * baseDays;
+        const fractional = proRated - Math.floor(proRated);
+        if (fractional >= 0.5) return Math.ceil(proRated);
+        else return Math.floor(proRated);
+    }
+    function getTotalAnnualEntitlement(emp) {
+        const current = getCurrentYearEntitlement(emp.startDate);
+        const carry = emp.carryOverDays || 0;
+        let total = current + carry;
+        const fractional = total - Math.floor(total);
+        if (fractional >= 0.5) return Math.ceil(total);
+        else return Math.floor(total);
+    }
+    function getUsedDays(empId, type) {
+        const records = getLeaveRecords();
+        return records.filter(r => r.empId === empId && r.type === type).reduce((sum, r) => sum + r.days, 0);
+    }
+    function getCurrentYearUnpaidDays(empId) {
+        const records = getLeaveRecords();
+        const currentYear = new Date().getFullYear();
+        return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear)
+                      .reduce((sum, r) => sum + r.days, 0);
+    }
+
+    function addLeaveRecord(empId, type, date, days, attachmentBase64, attachmentName) {
+        const records = getLeaveRecords();
+        const newRecord = { id: genId(), empId, type, date, days: parseFloat(days), attachment: attachmentBase64 || null, attachmentName: attachmentName || null };
+        records.push(newRecord);
+        saveLeaveRecords(records);
+        return newRecord.id;
+    }
+
+    function deleteLeaveRecordById(recordId) {
+        let records = getLeaveRecords();
+        records = records.filter(r => r.id !== recordId);
+        saveLeaveRecords(records);
+    }
+
+    function openLeaveForm(emp) {
+        const win = window.open('', '_blank');
+        win.document.write(`
+            <html>
+            <head><title>BEEBOX LEAVE FORM - 请假申请表</title>
+            <style>
+                body { font-family: Arial, sans-serif; padding: 40px; max-width: 800px; margin: auto; }
+                .form-header { text-align: center; margin-bottom: 30px; }
+                .form-header h1 { color: #0a2b3e; }
+                .form-header p { color: #555; }
+                .form-section { margin-bottom: 20px; }
+                label { font-weight: bold; display: block; margin-bottom: 5px; }
+                .field { border-bottom: 1px solid #ccc; padding: 8px; margin-bottom: 15px; }
+                .sign-line { margin-top: 40px; display: flex; justify-content: space-between; }
+                .btn-print { background: #1d5b8e; color: white; padding: 10px 20px; border: none; cursor: pointer; margin-top: 30px; border-radius: 30px; }
+                @media print {
+                    .btn-print { display: none; }
+                    body { padding: 0; margin: 0; }
+                }
+            </style>
+            </head>
+            <body>
+                <div class="form-header">
+                    <h1>📄 BEEBOX EXPRESS PTE LTD</h1>
+                    <h2>Leave Application Form / 请假申请表</h2>
+                    <p>Please fill in the details below / 请填写以下信息</p>
+                </div>
+                <div class="form-section">
+                    <label>Employee Name / 员工姓名:</label>
+                    <div class="field">${escapeHtml(emp.name)}</div>
+                    <label>Employee ID / 工号:</label>
+                    <div class="field">${emp.id}</div>
+                    <label>Department / 部门:</label>
+                    <div class="field">${escapeHtml(emp.department)}</div>
+                </div>
+                <div class="form-section">
+                    <label>Leave Type / 假期类型:</label>
+                    <div class="field">_________ (Annual / Sick / Unpaid / Other)</div>
+                    <label>Start Date / 开始日期:</label>
+                    <div class="field">_________ (DD/MM/YYYY)</div>
+                    <label>End Date / 结束日期:</label>
+                    <div class="field">_________ (DD/MM/YYYY)</div>
+                    <label>Number of Days / 天数:</label>
+                    <div class="field">_________ (days)</div>
+                    <label>Reason / 理由:</label>
+                    <div class="field">_________________________________</div>
+                </div>
+                <div class="form-section">
+                    <label>Attachment / 附件 (如有):</label>
+                    <div class="field">_________ (Medical certificate / supporting document)</div>
+                </div>
+                <div class="sign-line">
+                    <div>Employee Signature: _________________</div>
+                    <div>Date: _________________</div>
+                </div>
+                <div class="sign-line">
+                    <div>Approver Signature: _________________</div>
+                    <div>Date: _________________</div>
+                </div>
+                <div style="text-align: center; margin-top: 40px;">
+                    <button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button>
+                </div>
+                <p style="font-size: 12px; color: #666; margin-top: 50px; text-align: center;">Please submit this form to your approver after filling.</p>
+            </body>
+            </html>
+        `);
+        win.document.close();
+    }
+
+    // 渲染员工自己的假期卡片
+    function renderMyLeaveCard(emp, containerId) {
+        const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
+        const carryOver = emp.carryOverDays || 0;
+        const totalAnnual = getTotalAnnualEntitlement(emp);
+        const annualUsed = getUsedDays(emp.id, "annual");
+        const sickTotal = emp.sickTotal || 14;
+        const sickUsed = getUsedDays(emp.id, "sick");
+        const unpaidThisYear = getCurrentYearUnpaidDays(emp.id);
+        const currentYear = new Date().getFullYear();
+        const remainingAnnual = totalAnnual - annualUsed;
+        const html = `
+            <div class="info-panel">
+                <div class="user-greeting"><div class="avatar">${emp.name.charAt(0)}</div>
+                <div><h2>${escapeHtml(emp.name)}</h2><p>${escapeHtml(emp.department)} · 工号 ${emp.id}<br>📅 入职日期: ${emp.startDate}</p></div></div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${currentYearEnt} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">📦 上年结转年假 / Carry-over</div><div class="stat-number">${carryOver} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${totalAnnual} 天 / days</div></div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">✅ 已休年假 / Annual Taken</div><div class="stat-number">${annualUsed} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${remainingAnnual} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🤒 病假总额 / Sick Leave Entitlement</div><div class="stat-number">${sickTotal} 天 / days</div></div>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-card"><div class="stat-label">🩺 已休病假 / Sick Taken</div><div class="stat-number">${sickUsed} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">💪 剩余病假 / Remaining Sick</div><div class="stat-number" style="color:#2e8540;">${(sickTotal - sickUsed)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">⏸️ 本年无薪假 (${currentYear}) / Unpaid Leave</div><div class="stat-number">${unpaidThisYear} 天 / days</div></div>
+                </div>
+                <div style="margin-bottom:20px;"><button class="btn btn-primary" id="openRequestModalBtn">📝 提交假期申请 / Submit Leave Request</button></div>
+                <h3>📋 我的休假记录 / My Leave Records (已批准的假期)</h3>
+                <table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${renderMyLeaveRecords(emp.id)}</tbody></table>
+                <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
+                <table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></thead><tbody>${renderMyRequests(emp.id)}</tbody></table>
+                <div style="margin-top:16px; font-size:0.75rem; color:#6c8eae;">* 年假计算严格按照MOM官方规则。申请提交后由审批人处理。</div>
+            </div>
+        `;
+        document.getElementById(containerId).innerHTML = html;
+        document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
+    }
+
+    function renderMyLeaveRecords(empId) {
+        const records = getLeaveRecords().filter(r => r.empId === empId).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        if (records.length === 0) return '<tr><td colspan="4">暂无记录</tr>';
+        return records.map(r => {
+            let typeLabel = '';
+            if (r.type === 'annual') typeLabel = '年假 / Annual';
+            else if (r.type === 'sick') typeLabel = '病假 / Sick';
+            else if (r.type === 'unpaid') typeLabel = '无薪假 / Unpaid';
+            else typeLabel = r.type;
+            const attachmentHtml = r.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${r.id}')">📎 附件</a>` : '';
+            return `<tr><td>${r.date}</td><td>${typeLabel}</td><td>${r.days} 天 / days</td><td>${attachmentHtml}</td></tr>`;
+        }).join('');
+    }
+
+    function renderMyRequests(empId) {
+        const requests = getLeaveRequests().filter(r => r.empId === empId).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
+        if (requests.length === 0) return '<tr><td colspan="9">暂无申请</td></tr>';
+        return requests.map(req => {
+            let statusText = '';
+            if (req.status === 'pending') statusText = '待审批 / Pending';
+            else if (req.status === 'approved') statusText = '已批准 / Approved';
+            else statusText = '已拒绝 / Rejected';
+            const approvedByText = req.approvedByName ? req.approvedByName : (req.status === 'pending' ? '-' : req.approvedBy || '-');
+            const approvedAtText = req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-';
+            const attachmentLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
+            return `<tr><td>${new Date(req.createdAt).toLocaleDateString()}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${statusText}</td><td>${approvedByText}</td><td>${approvedAtText}</td><td>${attachmentLink}</td></tr>`;
+        }).join('');
+    }
+
+    function openRequestModal(emp) {
+        const modal = document.createElement('div'); modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content">
+                <h3>提交假期申请 / Submit Leave Request</h3>
+                <div class="form-group"><label>假期类型 / Type</label><select id="reqType"><option value="annual">年假 / Annual</option><option value="sick">病假 / Sick</option><option value="unpaid">无薪假 / Unpaid</option><option value="other">其他假期 / Other</option></select></div>
+                <div class="form-group"><label>开始日期 / Start Date</label><input type="date" id="reqStartDate"></div>
+                <div class="form-group"><label>结束日期 / End Date</label><input type="date" id="reqEndDate"></div>
+                <div class="form-group"><label>天数 / Days (如果是连续假期，系统自动计算)</label><input type="number" id="reqDays" step="0.5" placeholder="自动计算或手动填写"></div>
+                <div class="form-group"><label>理由 / Reason</label><textarea id="reqReason" rows="3"></textarea></div>
+                <div class="form-group"><label>附件 (证明文件) / Attachment</label><input type="file" id="reqFile"></div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
+                    <button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button>
+                    <div><button class="btn btn-secondary" id="closeReqModal">取消</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left: 10px;">提交申请</button></div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        document.getElementById('closeReqModal').onclick = () => modal.remove();
+        document.getElementById('submitReqBtn').onclick = async () => {
+            const type = document.getElementById('reqType').value;
+            const startDate = document.getElementById('reqStartDate').value;
+            const endDate = document.getElementById('reqEndDate').value;
+            let days = parseFloat(document.getElementById('reqDays').value);
+            const reason = document.getElementById('reqReason').value;
+            const fileInput = document.getElementById('reqFile');
+            let attachmentBase64 = null, attachmentName = null;
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                attachmentName = file.name;
+                attachmentBase64 = await readFileAsBase64(file);
+            }
+            if (!startDate || !reason) { alert("请填写开始日期和理由"); return; }
+            if (isNaN(days) || days <= 0) {
+                if (startDate && endDate) {
+                    const diffDays = (new Date(endDate) - new Date(startDate)) / (1000*3600*24) + 1;
+                    days = diffDays;
+                } else { alert("请填写天数或结束日期"); return; }
+            }
+            const requests = getLeaveRequests();
+            const newRequest = { id: genId(), empId: emp.id, type, startDate, endDate: endDate || startDate, days, reason, status: "pending", attachment: attachmentBase64, attachmentName, createdAt: new Date().toISOString(), approvedBy: null, approvedByName: null, approvedAt: null, recordId: null };
+            requests.push(newRequest);
+            saveLeaveRequests(requests);
+            modal.remove();
+            alert("申请已提交，等待审批");
+            const currentUser = sessionStorage.getItem('currentUser') ? JSON.parse(sessionStorage.getItem('currentUser')) : null;
+            if (currentUser && currentUser.id === emp.id) {
+                if (currentUser.role === 'admin') showAdminView();
+                else if (currentUser.isApprover) showApproverView(currentUser);
+                else showEmployeeView(currentUser);
+            }
+        };
+        document.getElementById('downloadFormBtn').onclick = () => openLeaveForm(emp);
+    }
+
+    async function readFileAsBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function approveRequest(reqId, approverEmp) {
+        let requests = getLeaveRequests();
+        const req = requests.find(r => r.id === reqId);
+        if (!req) return;
+        const recordType = req.type === 'other' ? 'other' : req.type;
+        const newRecordId = addLeaveRecord(req.empId, recordType, req.startDate, req.days, req.attachment, req.attachmentName);
+        req.status = "approved";
+        req.approvedBy = approverEmp.id;
+        req.approvedByName = approverEmp.name;
+        req.approvedAt = new Date().toISOString();
+        req.recordId = newRecordId;
+        saveLeaveRequests(requests);
+        if (sessionStorage.getItem('currentAdmin')) renderPendingAndHistory();
+        if (sessionStorage.getItem('currentApprover')) {
+            const approver = JSON.parse(sessionStorage.getItem('currentApprover'));
+            renderApproverPendingAndHistory(approver);
+        }
+        const currentUser = sessionStorage.getItem('currentUser') ? JSON.parse(sessionStorage.getItem('currentUser')) : null;
+        if (currentUser && currentUser.id === req.empId) {
+            if (currentUser.role === 'admin') showAdminView();
+            else if (currentUser.isApprover) showApproverView(currentUser);
+            else showEmployeeView(currentUser);
+        }
+        alert("已批准并自动添加记录");
+    }
+
+    function rejectRequest(reqId, approverEmp) {
+        let requests = getLeaveRequests();
+        const req = requests.find(r => r.id === reqId);
+        if (!req) return;
+        req.status = "rejected";
+        req.approvedBy = approverEmp.id;
+        req.approvedByName = approverEmp.name;
+        req.approvedAt = new Date().toISOString();
+        saveLeaveRequests(requests);
+        if (sessionStorage.getItem('currentAdmin')) renderPendingAndHistory();
+        if (sessionStorage.getItem('currentApprover')) {
+            const approver = JSON.parse(sessionStorage.getItem('currentApprover'));
+            renderApproverPendingAndHistory(approver);
+        }
+        alert("已拒绝申请");
+    }
+
+    function deleteRequest(reqId) {
+        let requests = getLeaveRequests();
+        const req = requests.find(r => r.id === reqId);
+        if (!req) return;
+        if (req.status === 'approved' && req.recordId) {
+            deleteLeaveRecordById(req.recordId);
+        }
+        requests = requests.filter(r => r.id !== reqId);
+        saveLeaveRequests(requests);
+        renderPendingAndHistory();
+        const currentUser = sessionStorage.getItem('currentUser') ? JSON.parse(sessionStorage.getItem('currentUser')) : null;
+        if (currentUser && currentUser.id === req.empId) {
+            if (currentUser.role === 'admin') showAdminView();
+            else if (currentUser.isApprover) showApproverView(currentUser);
+            else showEmployeeView(currentUser);
+        }
+        alert("已删除申请记录" + (req.recordId ? "及关联的休假记录" : ""));
+    }
+
+    function renderPendingAndHistory() {
+        renderPendingRequests('pendingRequestsContainer', null);
+        renderApprovalHistory('approvalHistoryContainer');
+    }
+    function renderApproverPendingAndHistory(approver) {
+        renderPendingRequests('approverPendingContainer', approver);
+        renderApprovalHistory('approverHistoryContainer');
+    }
+
+    function renderPendingRequests(containerId, currentApprover) {
+        const requests = getLeaveRequests();
+        const pending = requests.filter(r => r.status === "pending");
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (pending.length === 0) { container.innerHTML = "<p>暂无待审批申请</p>"; return; }
+        let html = `<table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        for (let req of pending) {
+            const emp = getEmployees().find(e => e.id === req.empId);
+            const empName = emp ? emp.name : req.empId;
+            const attachmentLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
+            html += `<tr><td>${escapeHtml(empName)}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days} 天 / days</td><td>${escapeHtml(req.reason)}</td><td>${attachmentLink}</td>
+            <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td></tr>`;
+        }
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+        window.approveRequestWrapper = (reqId) => {
+            let approver = null;
+            if (sessionStorage.getItem('currentAdmin')) {
+                const admin = getEmployees().find(e => e.id === 'admin');
+                if (admin) approver = admin;
+            } else if (sessionStorage.getItem('currentApprover')) {
+                approver = JSON.parse(sessionStorage.getItem('currentApprover'));
+            }
+            if (approver) approveRequest(reqId, approver);
+        };
+        window.rejectRequestWrapper = (reqId) => {
+            let approver = null;
+            if (sessionStorage.getItem('currentAdmin')) {
+                const admin = getEmployees().find(e => e.id === 'admin');
+                if (admin) approver = admin;
+            } else if (sessionStorage.getItem('currentApprover')) {
+                approver = JSON.parse(sessionStorage.getItem('currentApprover'));
+            }
+            if (approver) rejectRequest(reqId, approver);
+        };
+    }
+
+    function renderApprovalHistory(containerId) {
+        const requests = getLeaveRequests().filter(r => r.status !== "pending").sort((a,b)=>new Date(b.approvedAt)-new Date(a.approvedAt));
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        if (requests.length === 0) { container.innerHTML = "<p>暂无审批记录</p>"; return; }
+        let html = `<table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        for (let req of requests) {
+            const emp = getEmployees().find(e => e.id === req.empId);
+            const empName = emp ? emp.name : req.empId;
+            const result = req.status === 'approved' ? '批准' : '拒绝';
+            const attachmentLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
+            html += `<tr><td>${escapeHtml(empName)}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${result}</td><td>${req.approvedByName || '-'}</td><td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td><td>${attachmentLink}</td>
+            <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td></tr>`;
+        }
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+        window.deleteRequest = deleteRequest;
+    }
+
+    window.downloadRequestAttachment = function(reqId) {
+        const requests = getLeaveRequests();
+        const req = requests.find(r => r.id === reqId);
+        if (req && req.attachment) { const a = document.createElement('a'); a.href = req.attachment; a.download = req.attachmentName || 'attachment'; a.click(); }
+        else alert("无附件");
+    };
+    window.downloadAttachment = function(recordId) {
+        const records = getLeaveRecords();
+        const rec = records.find(r => r.id === recordId);
+        if (rec && rec.attachment) { const a = document.createElement('a'); a.href = rec.attachment; a.download = rec.attachmentName || 'attachment'; a.click(); }
+        else alert("无附件");
+    };
+
+    // 视图切换
+    function showEmployeeView(emp) {
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('employeeView').classList.remove('hidden');
+        document.getElementById('approverView').classList.add('hidden');
+        document.getElementById('adminView').classList.add('hidden');
+        renderMyLeaveCard(emp, 'employeeContent');
+        sessionStorage.setItem('currentUser', JSON.stringify(emp));
+        sessionStorage.removeItem('currentAdmin');
+        sessionStorage.removeItem('currentApprover');
+        updateAllDates();
+    }
+    function showApproverView(emp) {
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('employeeView').classList.add('hidden');
+        document.getElementById('approverView').classList.remove('hidden');
+        document.getElementById('adminView').classList.add('hidden');
+        const container = document.getElementById('approverContent');
+        container.innerHTML = `<div id="approverMyLeave"></div><div style="margin-top:32px;"><h3>📋 待审批申请 · Pending Requests</h3><div id="approverPendingContainer"></div></div><div style="margin-top:32px;"><h3>📜 审批历史 · Approval History</h3><div id="approverHistoryContainer"></div></div>`;
+        renderMyLeaveCard(emp, 'approverMyLeave');
+        renderPendingRequests('approverPendingContainer', emp);
+        renderApprovalHistory('approverHistoryContainer');
+        sessionStorage.setItem('currentApprover', JSON.stringify(emp));
+        sessionStorage.removeItem('currentAdmin');
+        sessionStorage.removeItem('currentUser');
+        updateAllDates();
+    }
+    function showAdminView() {
+        document.getElementById('loginView').classList.add('hidden');
+        document.getElementById('employeeView').classList.add('hidden');
+        document.getElementById('approverView').classList.add('hidden');
+        document.getElementById('adminView').classList.remove('hidden');
+        renderAdminTable();
+        renderPendingRequests('pendingRequestsContainer', null);
+        renderApprovalHistory('approvalHistoryContainer');
+        sessionStorage.setItem('currentAdmin', '1');
+        sessionStorage.removeItem('currentUser');
+        sessionStorage.removeItem('currentApprover');
+        updateAllDates();
+    }
+
+    // 管理员表格渲染
+    function renderAdminTable() {
+        const emps = getEmployees();
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>入职日期</th><th>当年应得</th><th>上年结转</th><th>年假总额</th><th>已休年假</th><th>病假总额</th><th>已休病假</th><th>本年无薪假</th><th>审批人</th><th>操作</th></tr></thead><tbody>`;
+        for (let emp of emps) {
+            if (emp.role === 'admin') continue;
+            const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
+            const carryOver = emp.carryOverDays || 0;
+            const totalAnnual = getTotalAnnualEntitlement(emp);
+            const annualUsed = getUsedDays(emp.id, 'annual');
+            const sickUsed = getUsedDays(emp.id, 'sick');
+            const sickTotal = emp.sickTotal || 14;
+            const unpaidThisYear = getCurrentYearUnpaidDays(emp.id);
+            html += `<tr><td>${escapeHtml(emp.id)}</td><td>${escapeHtml(emp.name)}</td><td>${escapeHtml(emp.department)}</td><td>${emp.startDate}</td>
+            <td>${currentYearEnt}</td><td>${carryOver}</td><td>${totalAnnual}</td><td>${annualUsed}</td><td>${sickTotal}</td><td>${sickUsed}</td>
+            <td>${unpaidThisYear}</td><td>${emp.isApprover ? '是' : '否'}</td>
+            <td class="action-btns"><button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
+            <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteEmployee('${emp.id}')">删除</button></td></tr>`;
+        }
+        html += `</tbody></table></div><button class="btn btn-secondary btn-sm" id="refreshAdminTable" style="margin-top:16px;">🔄 刷新</button>`;
+        document.getElementById("adminTableContainer").innerHTML = html;
+        document.getElementById("refreshAdminTable")?.addEventListener("click", () => { renderAdminTable(); renderPendingAndHistory(); });
+    }
+
+    window.openEmployeeEdit = function(empId) {
+        const emp = getEmployees().find(e => e.id === empId);
+        if (!emp) return;
+        const modal = document.createElement('div'); modal.className = 'modal';
+        modal.innerHTML = `<div class="modal-content"><h3>编辑员工信息</h3>
+            <div class="form-group"><label>姓名</label><input id="editName" value="${escapeHtml(emp.name)}"></div>
+            <div class="form-group"><label>部门</label><input id="editDept" value="${escapeHtml(emp.department)}"></div>
+            <div class="form-group"><label>密码</label><input id="editPwd" value="${emp.password}"></div>
+            <div class="form-group"><label>入职日期</label><input type="date" id="editStartDate" value="${emp.startDate}"></div>
+            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="editCarryOver" step="0.5" value="${emp.carryOverDays || 0}"></div>
+            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="editSickTotal" step="0.5" value="${emp.sickTotal || 14}"></div>
+            <div class="form-group"><label><input type="checkbox" id="editIsApprover" ${emp.isApprover ? 'checked' : ''}> 拥有审批权限 / Can approve requests</label></div>
+            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeModal">取消</button><button class="btn btn-primary" id="saveEdit">保存</button></div>
+        </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('closeModal').onclick = () => modal.remove();
+        document.getElementById('saveEdit').onclick = () => {
+            emp.name = document.getElementById('editName').value.trim();
+            emp.department = document.getElementById('editDept').value.trim();
+            emp.password = document.getElementById('editPwd').value.trim();
+            emp.startDate = document.getElementById('editStartDate').value;
+            emp.carryOverDays = parseFloat(document.getElementById('editCarryOver').value);
+            emp.sickTotal = parseFloat(document.getElementById('editSickTotal').value);
+            emp.isApprover = document.getElementById('editIsApprover').checked;
+            if (!emp.name || !emp.department || !emp.password || !emp.startDate || isNaN(emp.carryOverDays) || isNaN(emp.sickTotal)) alert("请填写完整");
+            else {
+                const emps = getEmployees();
+                const idx = emps.findIndex(e=>e.id===empId);
+                if(idx!==-1) emps[idx]=emp;
+                saveEmployees(emps);
+                renderAdminTable();
+                modal.remove();
+            }
+        };
+    };
+
+    window.manageRecords = function(empId) {
+        const emp = getEmployees().find(e=>e.id===empId);
+        if(!emp) return;
+        let records = getLeaveRecords().filter(r=>r.empId===empId);
+        const modal = document.createElement('div'); modal.className='modal';
+        const renderRecords = () => {
+            const recHtml = records.map(rec => {
+                let typeLabel = '';
+                if (rec.type === 'annual') typeLabel = '年假';
+                else if (rec.type === 'sick') typeLabel = '病假';
+                else if (rec.type === 'unpaid') typeLabel = '无薪假';
+                else typeLabel = rec.type;
+                const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
+                return `<tr><td>${rec.date}</td><td>${typeLabel}</td><td>${rec.days}</td><td>${attachHtml}</td><td><button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td></tr>`;
+            }).join('');
+            return `<h3>${emp.name} 的休假记录</h3>
+                <table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table>
+                <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="date" id="newDate" style="flex:1;"><select id="newType" style="flex:1;"><option value="annual">年假</option><option value="sick">病假</option><option value="unpaid">无薪假</option><option value="other">其他</option></select>
+                    <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1;">
+                    <input type="file" id="newAttachment" style="flex:2;">
+                    <button class="btn btn-primary btn-sm" id="addRecordBtn">➕ 添加</button>
+                </div></div>
+                <div style="margin-top:16px; text-align:right;"><button class="btn btn-secondary" id="closeRecordModal">关闭</button></div>`;
+        };
+        const refreshModal = () => {
+            records = getLeaveRecords().filter(r=>r.empId===empId);
+            document.getElementById('recordInner').innerHTML = renderRecords();
+            attachEvents();
+        };
+        const attachEvents = () => {
+            document.getElementById('addRecordBtn')?.addEventListener('click', async () => {
+                const date = document.getElementById('newDate').value;
+                const type = document.getElementById('newType').value;
+                const days = parseFloat(document.getElementById('newDays').value);
+                const fileInput = document.getElementById('newAttachment');
+                let attachmentBase64 = null, attachmentName = null;
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    attachmentName = file.name;
+                    attachmentBase64 = await readFileAsBase64(file);
+                }
+                if(!date || isNaN(days) || days<=0){ alert("请填写完整日期和正数天数"); return; }
+                const newRec = { id: genId(), empId, type, date, days, attachment: attachmentBase64, attachmentName };
+                const all = getLeaveRecords();
+                all.push(newRec);
+                saveLeaveRecords(all);
+                refreshModal();
+            });
+            window.deleteRecord = (recId) => {
+                let all = getLeaveRecords();
+                all = all.filter(r=>r.id!==recId);
+                saveLeaveRecords(all);
+                refreshModal();
+            };
+            document.getElementById('closeRecordModal')?.addEventListener('click',()=>modal.remove());
+        };
+        modal.innerHTML = `<div class="modal-content" id="recordInner">${renderRecords()}</div>`;
+        document.body.appendChild(modal);
+        attachEvents();
+    };
+
+    window.deleteEmployee = function(empId) {
+        if (empId === 'admin') { alert("不能删除管理员"); return; }
+        if(confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)){
+            let emps = getEmployees().filter(e=>e.id!==empId);
+            let records = getLeaveRecords().filter(r=>r.empId!==empId);
+            let requests = getLeaveRequests().filter(r=>r.empId!==empId);
+            saveEmployees(emps);
+            saveLeaveRecords(records);
+            saveLeaveRequests(requests);
+            renderAdminTable();
+            renderPendingAndHistory();
+        }
+    };
+    function addEmployee() {
+        const modal = document.createElement('div'); modal.className='modal';
+        modal.innerHTML = `<div class="modal-content"><h3>新增员工</h3>
+            <div class="form-group"><label>工号</label><input id="newId"></div>
+            <div class="form-group"><label>姓名</label><input id="newName"></div>
+            <div class="form-group"><label>部门</label><input id="newDept"></div>
+            <div class="form-group"><label>密码</label><input id="newPwd" value="123456"></div>
+            <div class="form-group"><label>入职日期</label><input type="date" id="newStartDate"></div>
+            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="newCarryOver" value="0" step="0.5"></div>
+            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="newSickTotal" value="14" step="0.5"></div>
+            <div class="form-group"><label><input type="checkbox" id="newIsApprover"> 拥有审批权限</label></div>
+            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeAdd">取消</button><button class="btn btn-primary" id="confirmAdd">创建</button></div>
+        </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('closeAdd').onclick = () => modal.remove();
+        document.getElementById('confirmAdd').onclick = () => {
+            const id = document.getElementById('newId').value.trim();
+            const name = document.getElementById('newName').value.trim();
+            const dept = document.getElementById('newDept').value.trim();
+            const pwd = document.getElementById('newPwd').value.trim();
+            const startDate = document.getElementById('newStartDate').value;
+            const carryOver = parseFloat(document.getElementById('newCarryOver').value);
+            const sickTotal = parseFloat(document.getElementById('newSickTotal').value);
+            const isApprover = document.getElementById('newIsApprover').checked;
+            if(!id || !name || !dept || !pwd || !startDate || isNaN(carryOver) || isNaN(sickTotal)) { alert("请完整填写"); return; }
+            const emps = getEmployees();
+            if(emps.find(e=>e.id===id)) { alert("工号已存在"); return; }
+            const newEmp = { id, name, department: dept, password: pwd, role: "user", startDate, sickTotal, carryOverDays: carryOver, isApprover };
+            emps.push(newEmp);
+            saveEmployees(emps);
+            renderAdminTable();
+            modal.remove();
+        };
+    }
+
+    function exportToExcel() {
+        const emps = getEmployees();
+        const currentYear = new Date().getFullYear();
+        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${currentYear})`]];
+        for (let emp of emps) {
+            if (emp.role === 'admin') continue;
+            const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
+            const carryOver = emp.carryOverDays || 0;
+            const totalAnnual = getTotalAnnualEntitlement(emp);
+            const annualUsed = getUsedDays(emp.id, 'annual');
+            const sickTotal = emp.sickTotal || 14;
+            const sickUsed = getUsedDays(emp.id, 'sick');
+            const unpaidThisYear = getCurrentYearUnpaidDays(emp.id);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEnt, carryOver, totalAnnual, annualUsed, totalAnnual-annualUsed, sickTotal, sickUsed, sickTotal-sickUsed, unpaidThisYear]);
+        }
+        const ws = XLSX.utils.aoa_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Employee_Leave_Data");
+        XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
+    }
+
+    // 登录逻辑
+    function login(empId, pwd) { const emps = getEmployees(); return emps.find(e=>e.id===empId && e.password===pwd) || null; }
+    function showLogin() {
+        document.getElementById('loginView').classList.remove('hidden');
+        document.getElementById('employeeView').classList.add('hidden');
+        document.getElementById('approverView').classList.add('hidden');
+        document.getElementById('adminView').classList.add('hidden');
+        document.getElementById('empIdInput').value = '';
+        document.getElementById('pwdInput').value = '';
+        document.getElementById('loginError').classList.add('hidden');
+        updateAllDates();
+    }
+    function handleLogin() {
+        const empId = document.getElementById('empIdInput').value.trim();
+        const pwd = document.getElementById('pwdInput').value;
+        const errDiv = document.getElementById('loginError');
+        if(!empId || !pwd) { errDiv.innerText="工号和密码不能为空"; errDiv.classList.remove('hidden'); return; }
+        const user = login(empId, pwd);
+        if(!user) { errDiv.innerText="工号或密码错误"; errDiv.classList.remove('hidden'); return; }
+        errDiv.classList.add('hidden');
+        if(user.role === 'admin') showAdminView();
+        else if(user.isApprover) showApproverView(user);
+        else showEmployeeView(user);
+    }
+    function logout() { sessionStorage.clear(); showLogin(); }
+    function checkSession() {
+        const currAdmin = sessionStorage.getItem('currentAdmin');
+        if (currAdmin) { showAdminView(); return; }
+        const currApprover = sessionStorage.getItem('currentApprover');
+        if (currApprover) {
+            try {
+                const approver = JSON.parse(currApprover);
+                const fresh = getEmployees().find(e=>e.id===approver.id);
+                if (fresh && fresh.isApprover) showApproverView(fresh);
+                else logout();
+            } catch(e) { logout(); }
+            return;
+        }
+        const currUser = sessionStorage.getItem('currentUser');
+        if (currUser) {
+            try {
+                const u = JSON.parse(currUser);
+                const fresh = getEmployees().find(e=>e.id===u.id);
+                if (fresh && fresh.role !== 'admin' && !fresh.isApprover) showEmployeeView(fresh);
+                else logout();
+            } catch(e) { logout(); }
+            return;
+        }
+        showLogin();
+    }
+    function updateAllDates() {
+        const today = new Date();
+        const formatted = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+        ['loginCurrentDate', 'empCurrentDate', 'approverCurrentDate', 'adminCurrentDate'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = formatted;
+        });
+    }
+    function escapeHtml(str){ if(!str) return ''; return str.replace(/[&<>]/g, function(m){ if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;}); }
+
+    // 绑定事件
+    document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
+    document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('adminLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('addEmployeeBtn')?.addEventListener('click', addEmployee);
+    document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
+    document.getElementById('pwdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
+    document.getElementById('empIdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
+
+    initData();
+    checkSession();
+</script>
+</body>
+</html>
