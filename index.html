@@ -3,9 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>BeeBox 假期管理系统 · 云端同步 · 周末规则</title>
+    <title>BeeBox 假期管理系统 · 云端同步 · 邮件通知</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
         * {
@@ -267,12 +268,9 @@
 <div class="container" id="app">
     <!-- 登录视图 -->
     <div id="loginView" class="card">
-        <div class="card-header">
-            <div class="header-left"><h1>🏝️ 假期管理系统 · Leave Management</h1><p>工号 + 密码登录 | 数据云端同步 | 周六半天·周日不计</p></div>
-            <div class="header-right"><div class="current-date" id="loginCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div></div>
-        </div>
-        <div class="card-body">
-            <div id="loginError" class="error-msg hidden"></div>
+        <div class="card-header"><div class="header-left"><h1>🏝️ 假期管理系统 · Leave Management</h1><p>工号 + 密码登录 | 数据云端同步 | 周六半天·周日不计</p></div>
+        <div class="header-right"><div class="current-date" id="loginCurrentDate"></div><div class="company-logo">BeeBox express pte ltd</div></div></div>
+        <div class="card-body"><div id="loginError" class="error-msg hidden"></div>
             <div class="form-group"><label>👤 工号 / Employee ID</label><input type="text" id="empIdInput" autocomplete="off"></div>
             <div class="form-group"><label>🔒 密码 / Password</label><input type="password" id="pwdInput"></div>
             <button class="btn btn-primary" id="doLoginBtn">登录 / Login</button>
@@ -313,9 +311,14 @@
                 <table style="width:100%; border-collapse: collapse; margin-top:20px; border:1px solid #cfdfed;">
                     <thead><tr><th>服务年限</th><th>年假天数</th></tr></thead>
                     <tbody>
-                        <tr><td>第1年</td><td>7</td></tr><tr><td>第2年</td><td>8</td></tr><tr><td>第3年</td><td>9</td></tr>
-                        <tr><td>第4年</td><td>10</td></tr><tr><td>第5年</td><td>11</td></tr><tr><td>第6年</td><td>12</td></tr>
-                        <tr><td>第7年</td><td>13</td></tr><tr><td>第8年及以上</td><td>14</td></tr>
+                        <tr><td>第1年</td><td>7</td></tr>
+                        <tr><td>第2年</td><td>8</td></tr>
+                        <tr><td>第3年</td><td>9</td></tr>
+                        <tr><td>第4年</td><td>10</td></tr>
+                        <tr><td>第5年</td><td>11</td></tr>
+                        <tr><td>第6年</td><td>12</td></tr>
+                        <tr><td>第7年</td><td>13</td></tr>
+                        <tr><td>第8年及以上</td><td>14</td></tr>
                     </tbody>
                 </table>
                 <p style="margin-top:12px;">✔ 年假按<strong>完整月数比例</strong>计算，四舍五入到整天。<br>
@@ -328,7 +331,7 @@
 </div>
 
 <script>
-    // ==================== Firebase 配置（您的项目） ====================
+    // ==================== Firebase 配置 ====================
     const firebaseConfig = {
         apiKey: "AIzaSyCjVW1eKRMQx3oWHjszjpo8OnYXRURYNzg",
         authDomain: "leave-management-15f37.firebaseapp.com",
@@ -339,6 +342,12 @@
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
+
+    // ==================== EmailJS 配置（已填好） ====================
+    const EMAILJS_SERVICE_ID = "service_9day31x";
+    const EMAILJS_TEMPLATE_ID = "template_lcij727";
+    const EMAILJS_PUBLIC_KEY = "eznVJ93uuk7QCwUV";
+    emailjs.init(EMAILJS_PUBLIC_KEY);
 
     const employeesCollection = db.collection("employees");
     const leaveRecordsCollection = db.collection("leaveRecords");
@@ -376,7 +385,7 @@
         return days;
     }
 
-    // 年假计算（MOM 官方规则）
+    // 年假计算（MOM官方规则）
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
@@ -532,7 +541,7 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
     }
 
-    // 提交申请模态框
+    // 提交申请模态框（含邮件通知）
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         modal.innerHTML = `
@@ -580,12 +589,29 @@
             if (!startDate || !endDate || !reason) { alert("请填写开始日期、结束日期和理由"); return; }
             if (isNaN(days) || days <= 0) days = calculateWorkDays(startDate, endDate);
             if (days <= 0) { alert("有效天数为0，请重新选择日期"); return; }
+
+            // 保存申请
             const newRequest = {
                 id: genId(), empId: emp.id, type, startDate, endDate, days, reason,
                 status: "pending", attachment: attachmentBase64, attachmentName,
                 createdAt: new Date().toISOString(), approvedBy: null, approvedByName: null, approvedAt: null, recordId: null
             };
             await saveLeaveRequest(newRequest);
+            // 发送邮件通知
+            try {
+                await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+                    employeeName: emp.name,
+                    employeeId: emp.id,
+                    leaveType: type,
+                    startDate: startDate,
+                    endDate: endDate,
+                    days: days,
+                    reason: reason
+                });
+                console.log("邮件通知已发送");
+            } catch (error) {
+                console.error("邮件发送失败，但申请已保存", error);
+            }
             modal.remove();
             alert("申请已提交");
             if (currentUser && currentUser.id === emp.id) {
@@ -627,7 +653,7 @@
         win.document.close();
     }
 
-    // 审批相关函数
+    // ==================== 审批相关函数（完整） ====================
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -776,7 +802,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理员编辑、休假记录管理
+    // 管理员编辑员工、休假记录管理等（与之前一致）
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -845,6 +871,161 @@
         document.body.appendChild(modal);
         attachEvents();
     };
+
+    window.openEmployeeEdit = async function(empId) {
+        const emps = await loadEmployees();
+        const emp = emps.find(e => e.id === empId);
+        if (!emp) return;
+        const modal = document.createElement('div'); modal.className='modal';
+        modal.innerHTML = `<div class="modal-content"><h3>编辑员工信息</h3>
+            <div class="form-group"><label>姓名</label><input id="editName" value="${escapeHtml(emp.name)}"></div>
+            <div class="form-group"><label>部门</label><input id="editDept" value="${escapeHtml(emp.department)}"></div>
+            <div class="form-group"><label>密码</label><input id="editPwd" value="${emp.password}"></div>
+            <div class="form-group"><label>入职日期</label><input type="date" id="editStartDate" value="${emp.startDate}"></div>
+            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="editCarryOver" step="0.5" value="${emp.carryOverDays || 0}"></div>
+            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="editSickTotal" step="0.5" value="${emp.sickTotal || 14}"></div>
+            <div class="form-group"><label><input type="checkbox" id="editIsApprover" ${emp.isApprover ? 'checked' : ''}> 拥有审批权限</label></div>
+            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeModal">取消</button><button class="btn btn-primary" id="saveEdit">保存</button></div>
+        </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('closeModal').onclick = () => modal.remove();
+        document.getElementById('saveEdit').onclick = async () => {
+            emp.name = document.getElementById('editName').value.trim();
+            emp.department = document.getElementById('editDept').value.trim();
+            emp.password = document.getElementById('editPwd').value.trim();
+            emp.startDate = document.getElementById('editStartDate').value;
+            emp.carryOverDays = parseFloat(document.getElementById('editCarryOver').value);
+            emp.sickTotal = parseFloat(document.getElementById('editSickTotal').value);
+            emp.isApprover = document.getElementById('editIsApprover').checked;
+            if (!emp.name || !emp.department || !emp.password || !emp.startDate || isNaN(emp.carryOverDays) || isNaN(emp.sickTotal)) alert("请填写完整");
+            else {
+                await saveEmployee(emp);
+                await renderAdminTable();
+                modal.remove();
+            }
+        };
+    };
+
+    window.deleteEmployeeFirestore = async function(empId) {
+        if (empId === 'admin') { alert("不能删除管理员"); return; }
+        if(confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)){
+            await deleteEmployeeFirestore(empId);
+            const records = (await loadLeaveRecords()).filter(r=>r.empId===empId);
+            for(let rec of records) await deleteLeaveRecordById(rec.id);
+            const requests = (await loadLeaveRequests()).filter(r=>r.empId===empId);
+            for(let req of requests) await deleteLeaveRequest(req.id);
+            await renderAdminTable();
+            await renderPendingAndHistory();
+        }
+    };
+
+    async function addEmployee() {
+        const modal = document.createElement('div'); modal.className='modal';
+        modal.innerHTML = `<div class="modal-content"><h3>新增员工</h3>
+            <div class="form-group"><label>工号</label><input id="newId"></div>
+            <div class="form-group"><label>姓名</label><input id="newName"></div>
+            <div class="form-group"><label>部门</label><input id="newDept"></div>
+            <div class="form-group"><label>密码</label><input id="newPwd" value="123456"></div>
+            <div class="form-group"><label>入职日期</label><input type="date" id="newStartDate"></div>
+            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="newCarryOver" value="0" step="0.5"></div>
+            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="newSickTotal" value="14" step="0.5"></div>
+            <div class="form-group"><label><input type="checkbox" id="newIsApprover"> 拥有审批权限</label></div>
+            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeAdd">取消</button><button class="btn btn-primary" id="confirmAdd">创建</button></div>
+        </div>`;
+        document.body.appendChild(modal);
+        document.getElementById('closeAdd').onclick = () => modal.remove();
+        document.getElementById('confirmAdd').onclick = async () => {
+            const id = document.getElementById('newId').value.trim();
+            const name = document.getElementById('newName').value.trim();
+            const dept = document.getElementById('newDept').value.trim();
+            const pwd = document.getElementById('newPwd').value.trim();
+            const startDate = document.getElementById('newStartDate').value;
+            const carryOver = parseFloat(document.getElementById('newCarryOver').value);
+            const sickTotal = parseFloat(document.getElementById('newSickTotal').value);
+            const isApprover = document.getElementById('newIsApprover').checked;
+            if(!id || !name || !dept || !pwd || !startDate || isNaN(carryOver) || isNaN(sickTotal)) { alert("请完整填写"); return; }
+            const emps = await loadEmployees();
+            if(emps.find(e=>e.id===id)) { alert("工号已存在"); return; }
+            const newEmp = { id, name, department: dept, password: pwd, role: "user", startDate, sickTotal, carryOverDays: carryOver, isApprover };
+            await saveEmployee(newEmp);
+            await renderAdminTable();
+            modal.remove();
+        };
+    }
+
+    async function exportToExcel() {
+        const emps = await loadEmployees();
+        const currentYear = new Date().getFullYear();
+        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${currentYear})`]];
+        for (let emp of emps) {
+            if (emp.role === 'admin') continue;
+            const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
+            const carryOver = emp.carryOverDays || 0;
+            const totalAnnual = getTotalAnnualEntitlement(emp);
+            const annualUsed = await getUsedDays(emp.id, 'annual');
+            const sickTotal = emp.sickTotal || 14;
+            const sickUsed = await getUsedDays(emp.id, 'sick');
+            const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEnt, carryOver, totalAnnual, annualUsed, totalAnnual-annualUsed, sickTotal, sickUsed, sickTotal-sickUsed, unpaidThisYear]);
+        }
+        const ws = XLSX.utils.aoa_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Employee_Leave_Data");
+        XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
+    }
+
+    // 强制同步完整员工数据
+    async function syncFullEmployeeData() {
+        if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
+        const fullList = [
+            { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
+            { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
+            { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
+            { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
+        ];
+        // 清空所有集合
+        const allEmps = await employeesCollection.get();
+        for (const doc of allEmps.docs) await doc.ref.delete();
+        const allRecords = await leaveRecordsCollection.get();
+        for (const doc of allRecords.docs) await doc.ref.delete();
+        const allReqs = await leaveRequestsCollection.get();
+        for (const doc of allReqs.docs) await doc.ref.delete();
+        // 导入员工
+        for (let emp of fullList) await saveEmployee(emp);
+        // 导入示例休假记录（可选）
+        const sampleRecords = [
+            { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "sick", date: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
+        ];
+        for (let rec of sampleRecords) await leaveRecordsCollection.doc(rec.id).set(rec);
+        alert("数据同步完成！");
+        if (sessionStorage.getItem('currentAdmin')) {
+            await renderAdminTable();
+            await renderPendingAndHistory();
+        } else {
+            window.location.reload();
+        }
+    }
 
     // 视图切换
     let currentUser = null;
@@ -941,176 +1122,8 @@
         if (req && req.attachment) { const a = document.createElement('a'); a.href = req.attachment; a.download = req.attachmentName || 'attachment'; a.click(); }
         else alert("无附件");
     };
-    window.openEmployeeEdit = async function(empId) {
-        const emps = await loadEmployees();
-        const emp = emps.find(e => e.id === empId);
-        if (!emp) return;
-        const modal = document.createElement('div'); modal.className='modal';
-        modal.innerHTML = `<div class="modal-content"><h3>编辑员工信息</h3>
-            <div class="form-group"><label>姓名</label><input id="editName" value="${escapeHtml(emp.name)}"></div>
-            <div class="form-group"><label>部门</label><input id="editDept" value="${escapeHtml(emp.department)}"></div>
-            <div class="form-group"><label>密码</label><input id="editPwd" value="${emp.password}"></div>
-            <div class="form-group"><label>入职日期</label><input type="date" id="editStartDate" value="${emp.startDate}"></div>
-            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="editCarryOver" step="0.5" value="${emp.carryOverDays || 0}"></div>
-            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="editSickTotal" step="0.5" value="${emp.sickTotal || 14}"></div>
-            <div class="form-group"><label><input type="checkbox" id="editIsApprover" ${emp.isApprover ? 'checked' : ''}> 拥有审批权限</label></div>
-            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeModal">取消</button><button class="btn btn-primary" id="saveEdit">保存</button></div>
-        </div>`;
-        document.body.appendChild(modal);
-        document.getElementById('closeModal').onclick = () => modal.remove();
-        document.getElementById('saveEdit').onclick = async () => {
-            emp.name = document.getElementById('editName').value.trim();
-            emp.department = document.getElementById('editDept').value.trim();
-            emp.password = document.getElementById('editPwd').value.trim();
-            emp.startDate = document.getElementById('editStartDate').value;
-            emp.carryOverDays = parseFloat(document.getElementById('editCarryOver').value);
-            emp.sickTotal = parseFloat(document.getElementById('editSickTotal').value);
-            emp.isApprover = document.getElementById('editIsApprover').checked;
-            if (!emp.name || !emp.department || !emp.password || !emp.startDate || isNaN(emp.carryOverDays) || isNaN(emp.sickTotal)) alert("请填写完整");
-            else {
-                await saveEmployee(emp);
-                await renderAdminTable();
-                modal.remove();
-            }
-        };
-    };
-    window.deleteEmployeeFirestore = async function(empId) {
-        if (empId === 'admin') { alert("不能删除管理员"); return; }
-        if(confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)){
-            await deleteEmployeeFirestore(empId);
-            const records = (await loadLeaveRecords()).filter(r=>r.empId===empId);
-            for(let rec of records) await deleteLeaveRecordById(rec.id);
-            const requests = (await loadLeaveRequests()).filter(r=>r.empId===empId);
-            for(let req of requests) await deleteLeaveRequest(req.id);
-            await renderAdminTable();
-            await renderPendingAndHistory();
-        }
-    };
-    async function addEmployee() {
-        const modal = document.createElement('div'); modal.className='modal';
-        modal.innerHTML = `<div class="modal-content"><h3>新增员工</h3>
-            <div class="form-group"><label>工号</label><input id="newId"></div>
-            <div class="form-group"><label>姓名</label><input id="newName"></div>
-            <div class="form-group"><label>部门</label><input id="newDept"></div>
-            <div class="form-group"><label>密码</label><input id="newPwd" value="123456"></div>
-            <div class="form-group"><label>入职日期</label><input type="date" id="newStartDate"></div>
-            <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="newCarryOver" value="0" step="0.5"></div>
-            <div class="form-group"><label>病假总额 (天)</label><input type="number" id="newSickTotal" value="14" step="0.5"></div>
-            <div class="form-group"><label><input type="checkbox" id="newIsApprover"> 拥有审批权限</label></div>
-            <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeAdd">取消</button><button class="btn btn-primary" id="confirmAdd">创建</button></div>
-        </div>`;
-        document.body.appendChild(modal);
-        document.getElementById('closeAdd').onclick = () => modal.remove();
-        document.getElementById('confirmAdd').onclick = async () => {
-            const id = document.getElementById('newId').value.trim();
-            const name = document.getElementById('newName').value.trim();
-            const dept = document.getElementById('newDept').value.trim();
-            const pwd = document.getElementById('newPwd').value.trim();
-            const startDate = document.getElementById('newStartDate').value;
-            const carryOver = parseFloat(document.getElementById('newCarryOver').value);
-            const sickTotal = parseFloat(document.getElementById('newSickTotal').value);
-            const isApprover = document.getElementById('newIsApprover').checked;
-            if(!id || !name || !dept || !pwd || !startDate || isNaN(carryOver) || isNaN(sickTotal)) { alert("请完整填写"); return; }
-            const emps = await loadEmployees();
-            if(emps.find(e=>e.id===id)) { alert("工号已存在"); return; }
-            const newEmp = { id, name, department: dept, password: pwd, role: "user", startDate, sickTotal, carryOverDays: carryOver, isApprover };
-            await saveEmployee(newEmp);
-            await renderAdminTable();
-            modal.remove();
-        };
-    }
-    async function exportToExcel() {
-        const emps = await loadEmployees();
-        const currentYear = new Date().getFullYear();
-        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${currentYear})`]];
-        for (let emp of emps) {
-            if (emp.role === 'admin') continue;
-            const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
-            const carryOver = emp.carryOverDays || 0;
-            const totalAnnual = getTotalAnnualEntitlement(emp);
-            const annualUsed = await getUsedDays(emp.id, 'annual');
-            const sickTotal = emp.sickTotal || 14;
-            const sickUsed = await getUsedDays(emp.id, 'sick');
-            const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
-            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEnt, carryOver, totalAnnual, annualUsed, totalAnnual-annualUsed, sickTotal, sickUsed, sickTotal-sickUsed, unpaidThisYear]);
-        }
-        const ws = XLSX.utils.aoa_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Employee_Leave_Data");
-        XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
-    }
 
-    // 强制同步完整员工数据（管理员点击按钮时调用）
-    async function syncFullEmployeeData() {
-        if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
-        // 完整员工列表（共21人）
-        const fullList = [
-            { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
-            { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
-            { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
-        ];
-        // 清空所有集合
-        const allEmps = await employeesCollection.get();
-        for (const doc of allEmps.docs) await doc.ref.delete();
-        const allRecords = await leaveRecordsCollection.get();
-        for (const doc of allRecords.docs) await doc.ref.delete();
-        const allReqs = await leaveRequestsCollection.get();
-        for (const doc of allReqs.docs) await doc.ref.delete();
-        // 导入完整员工
-        for (let emp of fullList) {
-            await saveEmployee(emp);
-        }
-        // 可选导入示例休假记录（保留182M和S1667227J的记录）
-        const sampleRecords = [
-            { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "sick", date: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
-        ];
-        for (let rec of sampleRecords) {
-            await leaveRecordsCollection.doc(rec.id).set(rec);
-        }
-        alert("数据同步完成！共导入 " + fullList.length + " 名员工。");
-        // 刷新当前管理员视图
-        if (sessionStorage.getItem('currentAdmin')) {
-            await renderAdminTable();
-            await renderPendingAndHistory();
-        } else {
-            window.location.reload();
-        }
-    }
-
-    // 事件绑定
-    document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
-    document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('adminLogoutBtn')?.addEventListener('click', logout);
-    document.getElementById('addEmployeeBtn')?.addEventListener('click', addEmployee);
-    document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
-    document.getElementById('syncDataBtn')?.addEventListener('click', syncFullEmployeeData);
-    document.getElementById('pwdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
-    document.getElementById('empIdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
-
-    // 启动时检查数据完整性，如不完整则自动同步
+    // 启动自动检查数据完整性
     (async function autoCheckAndSync() {
         const emps = await loadEmployees();
         if (emps.length < 20) {
@@ -1120,6 +1133,16 @@
             await checkSession();
         }
     })();
+
+    document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
+    document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('adminLogoutBtn')?.addEventListener('click', logout);
+    document.getElementById('addEmployeeBtn')?.addEventListener('click', addEmployee);
+    document.getElementById('exportExcelBtn')?.addEventListener('click', exportToExcel);
+    document.getElementById('syncDataBtn')?.addEventListener('click', syncFullEmployeeData);
+    document.getElementById('pwdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
+    document.getElementById('empIdInput')?.addEventListener('keypress', e=>{if(e.key==='Enter') handleLogin();});
 </script>
 </body>
 </html>
