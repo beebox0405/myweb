@@ -343,10 +343,10 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // ==================== EmailJS 配置（已更新 Public Key） ====================
-    const EMAILJS_SERVICE_ID = "service_9day31x";
-    const EMAILJS_TEMPLATE_ID = "template_lcij727";
-    const EMAILJS_PUBLIC_KEY = "44mQzjQWCDOTimX1x";
+    // ==================== EmailJS 配置（已更新正确的 Service ID） ====================
+    const EMAILJS_SERVICE_ID = "service_ochsqul";      // 用户提供的最新 Service ID
+    const EMAILJS_TEMPLATE_ID = "template_lcij727";    // 保持不变
+    const EMAILJS_PUBLIC_KEY = "44mQzjQWCDOTimX1x";    // 用户最新生成的 Public Key
     emailjs.init(EMAILJS_PUBLIC_KEY);
 
     const employeesCollection = db.collection("employees");
