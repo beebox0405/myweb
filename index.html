@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
+        /* 样式代码与之前完全相同，为节省篇幅不再重复，但功能完整 */
         * {
             margin: 0;
             padding: 0;
@@ -321,16 +322,17 @@
                     <thead><tr><th>服务年限</th><th>年假天数</th></tr></thead>
                     <tbody>
                         <tr><td>第1年</td><td>7</td></tr>
-                        <tr><td>第2年</td><td>8</td></tr>
+                        <tr><td>第2年</td><td>8<tr></tr>
                         <tr><td>第3年</td><td>9</td></tr>
                         <tr><td>第4年</td><td>10</td></tr>
                         <tr><td>第5年</td><td>11</td></tr>
                         <tr><td>第6年</td><td>12</td></tr>
-                        <tr><td>第7年</td><td>13</td></tr>
+                        <tr><td>第7年</td><td>13</td><tr>
                         <tr><td>第8年及以上</td><td>14</td></tr>
                     </tbody>
                 </table>
-                <p style="margin-top:12px;">✔ 年假按<strong>完整月数比例</strong>计算，四舍五入到整天。<br>
+                <p style="margin-top:12px;">✔ 年假按<strong>完整月数比例</strong>计算，保留精确值用于内部计算。<br>
+                ✔ 显示规则：小数部分<0.5舍去，=0.5保留一位小数，>0.5进位。<br>
                 ✔ <strong>请假天数计算规则：</strong> 周日全天不计，周六只算0.5天，周一至周五各算1天。<br>
                 ✔ 员工可提交申请，审批人批准后自动扣除假期。<br>
                 ✔ 管理员可在审批历史中删除记录（同时删除对应的休假记录）。</p>
@@ -373,6 +375,20 @@
         });
     }
 
+    // 显示格式化函数：0.1-0.4 舍去，0.5 保留 .5，0.6-0.9 进位
+    function formatDisplay(value) {
+        if (value === undefined || value === null) return '0';
+        const floorVal = Math.floor(value);
+        const decimal = value - floorVal;
+        if (Math.abs(decimal - 0.5) < 1e-9) {
+            return value.toFixed(1); // 正好0.5
+        } else if (decimal > 0.5) {
+            return Math.ceil(value);
+        } else {
+            return floorVal;
+        }
+    }
+
     // 周末天数计算
     function calculateWorkDays(startDateStr, endDateStr) {
         let start = new Date(startDateStr);
@@ -389,7 +405,7 @@
         return days;
     }
 
-    // 年假计算函数（MOM规则）
+    // 年假计算函数（MOM规则，保留原始精确值）
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
@@ -431,24 +447,6 @@
         if (yearIndex <= 7) return [0,7,8,9,10,11,12,13][yearIndex];
         return 14;
     }
-    function getCurrentYearEntitlement(startDateStr) {
-        if (!startDateStr) return 0;
-        const start = new Date(startDateStr);
-        const today = new Date();
-        const lastDay = getLastDayOfMonth(today);
-        const totalMonths = (lastDay.getFullYear() - start.getFullYear()) * 12 + (lastDay.getMonth() - start.getMonth());
-        if (totalMonths < 3) return 0;
-        const { yearIndex } = getServiceYearInfo(startDateStr, today);
-        if (yearIndex <= 0) return 0;
-        const baseDays = getBaseAnnualLeave(yearIndex);
-        const completedMonths = getCompletedMonthsInCurrentYear(startDateStr, today);
-        if (completedMonths >= 12) return baseDays;
-        let proRated = (completedMonths / 12) * baseDays;
-        const fractional = proRated - Math.floor(proRated);
-        if (fractional >= 0.5) return Math.ceil(proRated);
-        else return Math.floor(proRated);
-    }
-    // 获取当年应得年假原始值（未四舍五入，用于总额和剩余计算）
     function getCurrentYearEntitlementRaw(startDateStr) {
         if (!startDateStr) return 0;
         const start = new Date(startDateStr);
@@ -462,7 +460,6 @@
         const completedMonths = getCompletedMonthsInCurrentYear(startDateStr, today);
         if (completedMonths >= 12) return baseDays;
         let proRated = (completedMonths / 12) * baseDays;
-        // 不四舍五入，保留原始值用于精确计算
         return proRated;
     }
     function getTotalAnnualEntitlementRaw(emp) {
@@ -470,7 +467,6 @@
         const carry = emp.carryOverDays || 0;
         return current + carry;
     }
-    // 获取剩余年假（精确值，用于显示和限制）
     async function getRemainingAnnualDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -478,7 +474,6 @@
         const used = await getUsedDays(empId, "annual");
         return total - used;
     }
-    // 获取剩余病假
     async function getRemainingSickDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -511,7 +506,7 @@
         return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear).reduce((sum, r) => sum + r.days, 0);
     }
 
-    // 渲染员工/审批人卡片（含提前三天提示，剩余年假显示精确值）
+    // 渲染员工/审批人卡片（使用 formatDisplay）
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEnt = getCurrentYearEntitlementRaw(emp.startDate);
@@ -552,13 +547,13 @@
                 <div class="user-greeting"><div class="avatar">${emp.name.charAt(0)}</div>
                 <div><h2>${escapeHtml(emp.name)}</h2><p>${escapeHtml(emp.department)} · 工号 ${emp.id}<br>📅 入职日期: ${emp.startDate}</p></div></div>
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${currentYearEnt.toFixed(1)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${formatDisplay(currentYearEnt)} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">📦 上年结转年假 / Carry-over</div><div class="stat-number">${carryOver} 天 / days</div></div>
-                    <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${totalAnnual.toFixed(1)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${formatDisplay(totalAnnual)} 天 / days</div></div>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-label">✅ 已休年假 / Annual Taken</div><div class="stat-number">${annualUsed} 天 / days</div></div>
-                    <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${remainingAnnual.toFixed(1)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${formatDisplay(remainingAnnual)} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">🤒 病假总额 / Sick Leave Entitlement</div><div class="stat-number">${sickTotal} 天 / days</div></div>
                 </div>
                 <div class="stats-grid">
@@ -572,9 +567,9 @@
                     <strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。
                 </div>
                 <h3>📋 我的休假记录 / My Leave Records</h3>
-                <table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody></table>
+                <table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${recordRows || '<td><td colspan="4">暂无记录</td></tr>'}</tbody></table>
                 <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
-                <table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></tr></thead><tbody>${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}</tbody></table>
+                <table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></tr></thead><tbody>${requestRows || '<td><td colspan="9">暂无申请</td></tr>'}</tbody></table>
                 <div class="weekday-note">* 请假天数计算规则：周日全天不计，周六只算0.5天，周一至周五各算1天。</div>
             </div>
         `;
@@ -582,7 +577,7 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
     }
 
-    // 打开申请模态框（增加余额检查）
+    // 打开申请模态框（余额检查使用精确值）
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         const today = new Date().toISOString().slice(0,10);
@@ -667,7 +662,7 @@
             if (isNaN(days) || days <= 0) days = calculateWorkDays(startDate, endDate);
             if (days <= 0) { alert("有效天数为0，请重新选择日期"); return; }
 
-            // 余额检查
+            // 余额检查（使用精确值）
             if (type === 'annual') {
                 const remaining = await getRemainingAnnualDays(emp.id);
                 if (days > remaining) {
@@ -746,7 +741,7 @@
         win.document.close();
     }
 
-    // 审批相关函数（完整）
+    // 审批相关函数（完整，与之前相同）
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -822,8 +817,15 @@
             if (req.type === 'other' && req.customLeaveType) typeDisplay = req.customLeaveType;
             else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<tr><td>${escapeHtml(empName)}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${attachLink}</td>
-            <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td></tr>`;
+            html += `<tr>
+                <td>${escapeHtml(empName)}</td>
+                <td>${escapeHtml(typeDisplay)}</td>
+                <td>${req.startDate} ~ ${req.endDate}</td>
+                <td>${req.days}</td>
+                <td>${escapeHtml(req.reason)}</td>
+                <td>${attachLink}</td>
+                <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td>
+            </tr>`;
         }
         html += `</tbody></table>`;
         container.innerHTML = html;
@@ -864,8 +866,17 @@
             else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const result = req.status === 'approved' ? '批准' : '拒绝';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<tr><td>${escapeHtml(empName)}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${result}</td><td>${req.approvedByName || '-'}</td><td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td><td>${attachLink}</td>
-            <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td></tr>`;
+            html += `<tr>
+                <td>${escapeHtml(empName)}</td>
+                <td>${escapeHtml(typeDisplay)}</td>
+                <td>${req.startDate} ~ ${req.endDate}</td>
+                <td>${req.days}</td>
+                <td>${result}</td>
+                <td>${req.approvedByName || '-'}</td>
+                <td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td>
+                <td>${attachLink}</td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td>
+            </tr>`;
         }
         html += `</tbody></table>`;
         container.innerHTML = html;
@@ -879,7 +890,7 @@
             <th>已休年假 / Annual Taken</th><th>剩余年假 / Remaining Annual</th>
             <th>病假总额 / Sick Total</th><th>已休病假 / Sick Taken</th><th>剩余病假 / Remaining Sick</th>
             <th>本年无薪假 / Unpaid</th><th>审批人</th><th>操作 / Actions</th>
-        </tr></thead><tbody>`;
+        </table></thead><tbody>`;
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
             const currentYearEnt = getCurrentYearEntitlementRaw(emp.startDate);
@@ -892,11 +903,20 @@
             const remainingSick = sickTotal - sickUsed;
             const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
             html += `<tr>
-                <td>${escapeHtml(emp.id)}</td><td>${escapeHtml(emp.name)}</td><td>${escapeHtml(emp.department)}</td><td>${emp.startDate}</td>
-                <td>${currentYearEnt.toFixed(1)}</td><td>${carryOver}</td><td>${totalAnnual.toFixed(1)}</td>
-                <td>${annualUsed}</td><td>${remainingAnnual.toFixed(1)}</td>
-                <td>${sickTotal}</td><td>${sickUsed}</td><td>${remainingSick}</td>
-                <td>${unpaidThisYear}</td><td>${emp.isApprover ? '是' : '否'}</td>
+                <td>${escapeHtml(emp.id)}</td>
+                <td>${escapeHtml(emp.name)}</td>
+                <td>${escapeHtml(emp.department)}</td>
+                <td>${emp.startDate}</td>
+                <td>${formatDisplay(currentYearEnt)}</td>
+                <td>${carryOver}</td>
+                <td>${formatDisplay(totalAnnual)}</td>
+                <td>${annualUsed}</td>
+                <td>${formatDisplay(remainingAnnual)}</td>
+                <td>${sickTotal}</td>
+                <td>${sickUsed}</td>
+                <td>${remainingSick}</td>
+                <td>${unpaidThisYear}</td>
+                <td>${emp.isApprover ? '是' : '否'}</td>
                 <td class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
                     <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
@@ -931,7 +951,13 @@
                 else if (rec.type === 'unpaid') typeLabel = '无薪假';
                 else typeLabel = rec.type;
                 const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
-                return `<tr><td>${rec.date}</td><td>${typeLabel}</td><td>${rec.days}</td><td>${attachHtml}</td><td><button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td></tr>`;
+                return `<tr>
+                    <td>${rec.date}</td>
+                    <td>${typeLabel}</td>
+                    <td>${rec.days}</td>
+                    <td>${attachHtml}</td>
+                    <td><button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td>
+                </tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
                 <table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table>
