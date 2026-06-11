@@ -242,6 +242,15 @@
             color: #555;
             margin-top: 5px;
         }
+        .notice-advance {
+            font-size: 0.8rem;
+            color: #d9534f;
+            background: #fcf8e8;
+            padding: 8px 12px;
+            border-radius: 12px;
+            margin: 12px 0;
+            border-left: 4px solid #d9534f;
+        }
         @media (max-width: 700px) {
             .card-header { flex-direction: column; align-items: flex-start; }
             .header-right { align-self: flex-end; }
@@ -343,10 +352,10 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // ==================== EmailJS 配置（已更新正确的 Service ID） ====================
-    const EMAILJS_SERVICE_ID = "service_ochsqul";      // 用户提供的最新 Service ID
-    const EMAILJS_TEMPLATE_ID = "template_lcij727";    // 保持不变
-    const EMAILJS_PUBLIC_KEY = "44mQzjQWCDOTimX1x";    // 用户最新生成的 Public Key
+    // ==================== EmailJS 配置 ====================
+    const EMAILJS_SERVICE_ID = "service_ochsqul";      // 用户提供的 Service ID
+    const EMAILJS_TEMPLATE_ID = "template_lcij727";    // 模板ID
+    const EMAILJS_PUBLIC_KEY = "44mQzjQWCDOTimX1x";    // 用户最新 Public Key
     emailjs.init(EMAILJS_PUBLIC_KEY);
 
     const employeesCollection = db.collection("employees");
@@ -505,10 +514,13 @@
             if (req.status === 'pending') statusText = '待审批 / Pending';
             else if (req.status === 'approved') statusText = '已批准 / Approved';
             else statusText = '已拒绝 / Rejected';
+            let typeDisplay = req.type;
+            if (req.type === 'other' && req.customLeaveType) typeDisplay = req.customLeaveType;
+            else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const approvedByText = req.approvedByName ? req.approvedByName : (req.status === 'pending' ? '-' : req.approvedBy || '-');
             const approvedAtText = req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            return `<tr><td>${new Date(req.createdAt).toLocaleDateString()}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${statusText}</td><td>${approvedByText}</td><td>${approvedAtText}</td><td>${attachLink}</td></tr>`;
+            return `<tr><td>${new Date(req.createdAt).toLocaleDateString()}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${statusText}</td><td>${approvedByText}</td><td>${approvedAtText}</td><td>${attachLink}</td></tr>`;
         }).join('');
         const html = `
             <div class="info-panel">
@@ -541,18 +553,35 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
     }
 
-    // 提交申请模态框（含邮件通知）
+    // 提交申请模态框（含新功能）
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
+        const today = new Date().toISOString().slice(0,10);
         modal.innerHTML = `
             <div class="modal-content">
                 <h3>提交假期申请 / Submit Leave Request</h3>
-                <div class="form-group"><label>假期类型 / Type</label><select id="reqType"><option value="annual">年假 / Annual</option><option value="sick">病假 / Sick</option><option value="unpaid">无薪假 / Unpaid</option><option value="other">其他假期 / Other</option></select></div>
-                <div class="form-group"><label>开始日期 / Start Date</label><input type="date" id="reqStartDate"></div>
-                <div class="form-group"><label>结束日期 / End Date</label><input type="date" id="reqEndDate"></div>
+                <div class="form-group"><label>假期类型 / Type</label>
+                    <select id="reqType">
+                        <option value="annual">年假 / Annual</option>
+                        <option value="sick">病假 / Sick</option>
+                        <option value="unpaid">无薪假 / Unpaid</option>
+                        <option value="urgent">紧急休假 / Urgent Leave</option>
+                        <option value="other">其他假期 / Other</option>
+                    </select>
+                </div>
+                <div id="customTypeGroup" class="form-group" style="display:none;">
+                    <label>请填写具体假期名称 / Please specify leave name</label>
+                    <input type="text" id="customLeaveType" placeholder="例如: 婚假 / Marriage Leave">
+                </div>
+                <div class="form-group"><label>开始日期 / Start Date</label><input type="date" id="reqStartDate" min="${today}"></div>
+                <div class="form-group"><label>结束日期 / End Date</label><input type="date" id="reqEndDate" min="${today}"></div>
                 <div class="form-group"><label>天数 / Days (自动按周末规则计算)</label><input type="number" id="reqDays" step="0.5" placeholder="自动计算"></div>
                 <div class="form-group"><label>理由 / Reason</label><textarea id="reqReason" rows="3"></textarea></div>
                 <div class="form-group"><label>附件 / Attachment</label><input type="file" id="reqFile"></div>
+                <div class="notice-advance">
+                    <strong>NOTED:</strong> PLEASE SUBMIT THE LEAVE FORM IN ADVANCE FOR AT LEAST THREE (3) WORKING DAYS.<br>
+                    <strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。
+                </div>
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
                     <button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button>
                     <div><button class="btn btn-secondary" id="closeReqModal">取消</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left: 10px;">提交申请</button></div>
@@ -561,6 +590,17 @@
             </div>
         `;
         document.body.appendChild(modal);
+        const typeSelect = document.getElementById('reqType');
+        const customGroup = document.getElementById('customTypeGroup');
+        const customInput = document.getElementById('customLeaveType');
+        typeSelect.addEventListener('change', () => {
+            if (typeSelect.value === 'other') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+                customInput.value = '';
+            }
+        });
         const startDateInput = document.getElementById('reqStartDate');
         const endDateInput = document.getElementById('reqEndDate');
         const daysInput = document.getElementById('reqDays');
@@ -574,7 +614,15 @@
         endDateInput.addEventListener('change', updateDays);
         document.getElementById('closeReqModal').onclick = () => modal.remove();
         document.getElementById('submitReqBtn').onclick = async () => {
-            const type = document.getElementById('reqType').value;
+            let type = typeSelect.value;
+            let customLeaveType = null;
+            if (type === 'other') {
+                customLeaveType = customInput.value.trim();
+                if (!customLeaveType) {
+                    alert("请填写具体假期名称");
+                    return;
+                }
+            }
             const startDate = startDateInput.value;
             const endDate = endDateInput.value;
             let days = parseFloat(daysInput.value);
@@ -590,19 +638,21 @@
             if (isNaN(days) || days <= 0) days = calculateWorkDays(startDate, endDate);
             if (days <= 0) { alert("有效天数为0，请重新选择日期"); return; }
 
-            // 保存申请
             const newRequest = {
-                id: genId(), empId: emp.id, type, startDate, endDate, days, reason,
+                id: genId(), empId: emp.id, type, customLeaveType, startDate, endDate, days, reason,
                 status: "pending", attachment: attachmentBase64, attachmentName,
                 createdAt: new Date().toISOString(), approvedBy: null, approvedByName: null, approvedAt: null, recordId: null
             };
             await saveLeaveRequest(newRequest);
-            // 发送邮件通知
+            // 发送邮件通知（显示自定义类型）
+            let displayType = type;
+            if (type === 'urgent') displayType = '紧急休假 / Urgent Leave';
+            else if (type === 'other' && customLeaveType) displayType = customLeaveType;
             try {
                 await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
                     employeeName: emp.name,
                     employeeId: emp.id,
-                    leaveType: type,
+                    leaveType: displayType,
                     startDate: startDate,
                     endDate: endDate,
                     days: days,
@@ -653,12 +703,14 @@
         win.document.close();
     }
 
-    // ==================== 审批相关函数 ====================
+    // ==================== 审批相关函数（与之前相同，略作调整以显示自定义类型） ====================
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
         if (!req) return;
-        const recordType = req.type === 'other' ? 'other' : req.type;
+        let recordType = req.type;
+        if (req.type === 'other' && req.customLeaveType) recordType = req.customLeaveType;
+        else if (req.type === 'urgent') recordType = 'urgent';
         const newRecordId = await addLeaveRecord(req.empId, recordType, req.startDate, req.days, req.attachment, req.attachmentName);
         req.status = "approved";
         req.approvedBy = approverEmp.id;
@@ -723,8 +775,11 @@
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
             const empName = emp ? emp.name : req.empId;
+            let typeDisplay = req.type;
+            if (req.type === 'other' && req.customLeaveType) typeDisplay = req.customLeaveType;
+            else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<tr><td>${escapeHtml(empName)}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${attachLink}</td>
+            html += `<tr><td>${escapeHtml(empName)}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${attachLink}</td>
             <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td></tr>`;
         }
         html += `</tbody></table>`;
@@ -761,9 +816,12 @@
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
             const empName = emp ? emp.name : req.empId;
+            let typeDisplay = req.type;
+            if (req.type === 'other' && req.customLeaveType) typeDisplay = req.customLeaveType;
+            else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const result = req.status === 'approved' ? '批准' : '拒绝';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<tr><td>${escapeHtml(empName)}</td><td>${req.type}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${result}</td><td>${req.approvedByName || '-'}</td><td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td><td>${attachLink}</td>
+            html += `<tr><td>${escapeHtml(empName)}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${result}</td><td>${req.approvedByName || '-'}</td><td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td><td>${attachLink}</td>
             <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td></tr>`;
         }
         html += `</tbody></table>`;
@@ -802,7 +860,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理员编辑员工、休假记录管理等
+    // 管理员编辑员工、休假记录管理等（与之前相同，省略以节省长度，但保留完整功能）
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
