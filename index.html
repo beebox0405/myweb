@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>BeeBox 假期管理系统</title>
+    <title>BeeBox 假期管理系统 · 最终修复版</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
@@ -320,9 +320,8 @@
                 <table style="width:100%; border-collapse: collapse; margin-top:20px; border:1px solid #cfdfed;">
                     <thead><tr><th>服务年限</th><th>年假天数</th></tr></thead>
                     <tbody>
-                        <tr><td>第1年</td><td>7</td></tr><tr><td>第2年</td><td>8</td></tr>
-                        <tr><td>第3年</td><td>9</td></tr><tr><td>第4年</td><td>10</td></tr>
-                        <tr><td>第5年</td><td>11</td></tr><tr><td>第6年</td><td>12</td></tr>
+                        <tr><td>第1年</td><td>7</td></tr><tr><td>第2年</td><td>8</td></tr><tr><td>第3年</td><td>9</td></tr>
+                        <tr><td>第4年</td><td>10</td></tr><tr><td>第5年</td><td>11</td></tr><tr><td>第6年</td><td>12</td></tr>
                         <tr><td>第7年</td><td>13</td></tr><tr><td>第8年及以上</td><td>14</td></tr>
                     </tbody>
                 </table>
@@ -385,7 +384,7 @@
         return days;
     }
 
-    // 年假计算函数（MOM）
+    // 年假计算函数（MOM规则）
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
@@ -477,7 +476,7 @@
         return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear).reduce((sum, r) => sum + r.days, 0);
     }
 
-    // 渲染员工视图（包含提前三天提示）
+    // 渲染员工/审批人卡片（含提前三天提示）
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
@@ -696,7 +695,7 @@
         win.document.close();
     }
 
-    // 审批相关函数
+    // 审批相关函数（完整）
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -823,7 +822,12 @@
     }
     async function renderAdminTable() {
         const emps = await loadEmployees();
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>工号</th><th>姓名</th><th>部门</th><th>入职日期</th><th>当年应得</th><th>上年结转</th><th>年假总额</th><th>已休年假</th><th>病假总额</th><th>已休病假</th><th>本年无薪假</th><th>审批人</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>
+            <th>工号 / ID</th><th>姓名 / Name</th><th>部门 / Dept</th><th>入职日期 / Start Date</th>
+            <th>当年应得 / Current Year</th><th>上年结转 / Carry-over</th><th>年假总额 / Total Annual</th>
+            <th>已休年假 / Annual Taken</th><th>病假总额 / Sick Total</th><th>已休病假 / Sick Taken</th>
+            <th>本年无薪假 / Unpaid</th><th>审批人</th><th>操作 / Actions</th>
+        </tr></thead><tbody>`;
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
             const currentYearEnt = getCurrentYearEntitlement(emp.startDate);
@@ -835,8 +839,9 @@
             const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
             html += `<tr>
                 <td>${escapeHtml(emp.id)}</td><td>${escapeHtml(emp.name)}</td><td>${escapeHtml(emp.department)}</td><td>${emp.startDate}</td>
-                <td>${currentYearEnt}</td><td>${carryOver}</td><td>${totalAnnual}</td><td>${annualUsed}</td>
-                <td>${sickTotal}</td><td>${sickUsed}</td><td>${unpaidThisYear}</td><td>${emp.isApprover ? '是' : '否'}</td>
+                <td>${currentYearEnt}</td><td>${carryOver}</td><td>${totalAnnual}</td>
+                <td>${annualUsed}</td><td>${sickTotal}</td><td>${sickUsed}</td>
+                <td>${unpaidThisYear}</td><td>${emp.isApprover ? '是' : '否'}</td>
                 <td class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
                     <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
@@ -857,7 +862,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理休假记录（管理员）
+    // 管理员管理休假记录
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -1030,6 +1035,7 @@
         XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
     }
 
+    // 强制同步完整员工数据（修复数据不一致的关键）
     async function syncFullEmployeeData() {
         if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
         const fullList = [
@@ -1055,13 +1061,16 @@
             { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
             { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
         ];
+        // 清空所有集合
         const allEmps = await employeesCollection.get();
         for (const doc of allEmps.docs) await doc.ref.delete();
         const allRecords = await leaveRecordsCollection.get();
         for (const doc of allRecords.docs) await doc.ref.delete();
         const allReqs = await leaveRequestsCollection.get();
         for (const doc of allReqs.docs) await doc.ref.delete();
+        // 导入员工
         for (let emp of fullList) await saveEmployee(emp);
+        // 导入示例休假记录（确保182M只有2条，共5天）
         const sampleRecords = [
             { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
             { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
@@ -1175,7 +1184,7 @@
         else alert("无附件");
     };
 
-    // 启动
+    // 启动自动检查数据完整性
     (async function autoCheckAndSync() {
         const emps = await loadEmployees();
         if (emps.length < 20) {
@@ -1186,6 +1195,7 @@
         }
     })();
 
+    // 绑定事件
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
     document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
     document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
