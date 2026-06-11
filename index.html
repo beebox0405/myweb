@@ -3,13 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>BeeBox 假期管理系统 · 最终修复版</title>
+    <title>BeeBox 假期管理系统 · 最终稳定版</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* 基础样式与之前相同，省略重复代码，但保证表格不换行 */
         * {
             margin: 0;
             padding: 0;
@@ -173,11 +172,15 @@
             font-weight: 500;
             color: #2c4b6e;
         }
+        .table-wrapper {
+            overflow-x: auto;
+            margin-top: 16px;
+        }
         .leave-table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 16px;
             border: 1px solid #cfdfed;
+            min-width: 1300px;
         }
         .leave-table th, .leave-table td {
             border: 1px solid #cfdfed;
@@ -315,33 +318,12 @@
                     <button class="btn btn-primary btn-sm" id="addEmployeeBtn">➕ 新增员工</button>
                 </div>
             </div>
-            <div id="adminTableContainer"></div>
+            <div class="table-wrapper" id="adminTableContainer"></div>
             <div style="margin-top: 32px;"><h3>📋 待审批申请 · Pending Requests</h3><div id="pendingRequestsContainer"></div></div>
             <div style="margin-top: 32px;"><h3>📜 审批历史 · Approval History</h3><div id="approvalHistoryContainer"></div></div>
-            <div style="margin-top: 32px;"><h4>📋 年假计算规则 (新加坡人力部 + 周末规则)</h4>
-                <table style="width:100%; border-collapse: collapse; margin-top:20px; border:1px solid #cfdfed;">
-                    <thead><tr><th>服务年限</th><th>年假天数</th></tr></thead>
-                    <tbody>
-                        <tr><td>第1年</td><td>7</td></tr>
-                        <tr><td>第2年</td><td>8</td></tr>
-                        <tr><td>第3年</td><td>9</td></tr>
-                        <tr><td>第4年</td><td>10</td></tr>
-                        <tr><td>第5年</td><td>11</td></tr>
-                        <tr><td>第6年</td><td>12</td></tr>
-                        <tr><td>第7年</td><td>13</td></tr>
-                        <tr><td>第8年及以上</td><td>14</td></tr>
-                    </tbody>
-                </table>
-                <p style="margin-top:12px;">✔ 年假按<strong>当前工作年已完成的完整月数</strong>比例计算，四舍五入到整天。<br>
-                ✔ 显示规则：小数部分<0.5舍去，=0.5保留一位小数，>0.5进位。<br>
-                ✔ <strong>请假天数计算规则：</strong> 周日全天不计，周六只算0.5天，周一至周五各算1天。<br>
-                ✔ 员工可提交申请，审批人批准后自动扣除假期。<br>
-                ✔ 管理员可在审批历史中删除记录（同时删除对应的休假记录）。</p>
-            </div>
         </div>
     </div>
 </div>
-
 <script>
     // ==================== Firebase 配置 ====================
     const firebaseConfig = {
@@ -376,8 +358,7 @@
         });
     }
 
-    // 显示格式化函数：0.1-0.4 舍去，0.5 保留 .5，0.6-0.9 进位
-    function formatDisplay(value) {
+    function formatRemaining(value) {
         if (value === undefined || value === null) return '0';
         const floorVal = Math.floor(value);
         const decimal = value - floorVal;
@@ -390,7 +371,11 @@
         }
     }
 
-    // 周末天数计算
+    function formatAnnual(value) {
+        if (value === undefined || value === null) return '0';
+        return Math.round(value);
+    }
+
     function calculateWorkDays(startDateStr, endDateStr) {
         let start = new Date(startDateStr);
         let end = new Date(endDateStr);
@@ -406,82 +391,99 @@
         return days;
     }
 
-    // ==================== 年假计算（MOM 官方规则：完整月数 + 四舍五入） ====================
+    // ==================== 年假计算（自动） ====================
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
 
-    // 获取当前处于第几个服务年，以及当前工作年的起始日期
-    function getServiceYearInfo(startDateStr, referenceDate = new Date()) {
-        if (!startDateStr) return { yearIndex: 0, currentYearStart: null };
+    function getCurrentWorkYearStart(startDateStr, referenceDate = new Date()) {
         const start = new Date(startDateStr);
         const lastDay = getLastDayOfMonth(referenceDate);
-        if (lastDay < start) return { yearIndex: 0, currentYearStart: null };
+        let anniversary = 0;
+        let temp = new Date(start);
+        while (true) {
+            let next = new Date(temp);
+            next.setFullYear(temp.getFullYear() + 1);
+            if (next <= lastDay) {
+                anniversary++;
+                temp = next;
+            } else break;
+        }
+        const currentYearStart = new Date(start);
+        currentYearStart.setFullYear(start.getFullYear() + anniversary);
+        return currentYearStart;
+    }
+
+    function getFullMonthsBetween(startDate, endDate) {
+        if (startDate > endDate) return 0;
+        let years = endDate.getFullYear() - startDate.getFullYear();
+        let months = endDate.getMonth() - startDate.getMonth();
+        let totalMonths = years * 12 + months;
+        if (endDate.getDate() < startDate.getDate()) {
+            totalMonths--;
+        }
+        return totalMonths;
+    }
+
+    function getCompletedMonthsInCurrentYear(startDateStr, referenceDate = new Date()) {
+        const workYearStart = getCurrentWorkYearStart(startDateStr, referenceDate);
+        const lastDay = getLastDayOfMonth(referenceDate);
+        if (lastDay < workYearStart) return 0;
+        return getFullMonthsBetween(workYearStart, lastDay);
+    }
+
+    function getServiceYearIndex(startDateStr, referenceDate = new Date()) {
+        const start = new Date(startDateStr);
+        const lastDay = getLastDayOfMonth(referenceDate);
+        if (lastDay < start) return 0;
         let anniversaries = 0;
         let temp = new Date(start);
         while (true) {
             let next = new Date(temp);
             next.setFullYear(temp.getFullYear() + 1);
-            if (next <= lastDay) { anniversaries++; temp = next; }
-            else break;
-        }
-        const currentYearStart = new Date(start);
-        currentYearStart.setFullYear(start.getFullYear() + anniversaries);
-        const yearIndex = anniversaries + 1;
-        return { yearIndex, currentYearStart };
-    }
-
-    // 获取当前工作年已完成的完整月数（不足一个月不计）
-    function getCompletedMonthsInCurrentYear(startDateStr, referenceDate = new Date()) {
-        const { currentYearStart } = getServiceYearInfo(startDateStr, referenceDate);
-        if (!currentYearStart) return 0;
-        const lastDay = getLastDayOfMonth(referenceDate);
-        if (lastDay < currentYearStart) return 0;
-        let completedMonths = 0;
-        let tempDate = new Date(currentYearStart);
-        while (true) {
-            let nextMonth = new Date(tempDate);
-            nextMonth.setMonth(tempDate.getMonth() + 1);
-            if (nextMonth <= lastDay) {
-                completedMonths++;
-                tempDate = nextMonth;
+            if (next <= lastDay) {
+                anniversaries++;
+                temp = next;
             } else break;
         }
-        return completedMonths;
+        return anniversaries + 1;
     }
 
-    // 获取基础年假天数
     function getBaseAnnualLeave(yearIndex) {
         if (yearIndex <= 0) return 0;
         if (yearIndex <= 7) return [0,7,8,9,10,11,12,13][yearIndex];
         return 14;
     }
 
-    // 当年应得年假（原始精确值，未四舍五入，用于内部计算）
-    function getCurrentYearEntitlementRaw(startDateStr) {
+    function getAutoCurrentYearEntitlement(startDateStr) {
         if (!startDateStr) return 0;
-        const start = new Date(startDateStr);
         const today = new Date();
         const lastDay = getLastDayOfMonth(today);
+        const start = new Date(startDateStr);
         const totalMonths = (lastDay.getFullYear() - start.getFullYear()) * 12 + (lastDay.getMonth() - start.getMonth());
         if (totalMonths < 3) return 0;
-        const { yearIndex } = getServiceYearInfo(startDateStr, today);
+        const yearIndex = getServiceYearIndex(startDateStr, today);
         if (yearIndex <= 0) return 0;
         const baseDays = getBaseAnnualLeave(yearIndex);
         const completedMonths = getCompletedMonthsInCurrentYear(startDateStr, today);
         if (completedMonths >= 12) return baseDays;
         let proRated = (completedMonths / 12) * baseDays;
-        return proRated;
+        return Math.round(proRated * 10) / 10;
     }
 
-    // 总额（精确）
+    function getCurrentYearEntitlementRaw(emp) {
+        if (emp.manualAnnual !== undefined && emp.manualAnnual !== null && emp.manualAnnual > 0) {
+            return emp.manualAnnual;
+        }
+        return getAutoCurrentYearEntitlement(emp.startDate);
+    }
+
     function getTotalAnnualEntitlementRaw(emp) {
-        const current = getCurrentYearEntitlementRaw(emp.startDate);
+        const current = getCurrentYearEntitlementRaw(emp);
         const carry = emp.carryOverDays || 0;
         return current + carry;
     }
 
-    // 剩余年假（精确）
     async function getRemainingAnnualDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -490,7 +492,6 @@
         return total - used;
     }
 
-    // 剩余病假
     async function getRemainingSickDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -523,14 +524,14 @@
         return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear).reduce((sum, r) => sum + r.days, 0);
     }
 
-    // 渲染员工/审批人卡片
+    // 渲染员工卡片
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
-        const currentYearEnt = getCurrentYearEntitlementRaw(emp.startDate);
+        const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
         const carryOver = emp.carryOverDays || 0;
-        const totalAnnual = currentYearEnt + carryOver;
+        const totalAnnualRaw = currentYearEntRaw + carryOver;
         const annualUsed = await getUsedDays(emp.id, "annual");
-        const remainingAnnual = totalAnnual - annualUsed;
+        const remainingAnnualRaw = totalAnnualRaw - annualUsed;
         const sickTotal = emp.sickTotal || 14;
         const sickUsed = await getUsedDays(emp.id, "sick");
         const remainingSick = sickTotal - sickUsed;
@@ -543,7 +544,12 @@
             else if (r.type === 'unpaid') typeLabel = '无薪假 / Unpaid';
             else typeLabel = r.type;
             const attachHtml = r.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${r.id}')">📎 附件</a>` : '';
-            return `<tr><td>${r.date}</td><td>${typeLabel}</td><td>${r.days} 天 / days</td><td>${attachHtml}</td></tr>`;
+            return `<tr>
+                <td>${r.date}</td>
+                <td>${typeLabel}</td>
+                <td>${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td>
+                <td>${attachHtml}</td>
+            </tr>`;
         }).join('');
         const requests = (await loadLeaveRequests()).filter(r => r.empId === emp.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
         const requestRows = requests.map(req => {
@@ -557,20 +563,30 @@
             const approvedByText = req.approvedByName ? req.approvedByName : (req.status === 'pending' ? '-' : req.approvedBy || '-');
             const approvedAtText = req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            return `<tr><td>${new Date(req.createdAt).toLocaleDateString()}</td><td>${escapeHtml(typeDisplay)}</td><td>${req.startDate} ~ ${req.endDate}</td><td>${req.days}</td><td>${escapeHtml(req.reason)}</td><td>${statusText}</td><td>${approvedByText}</td><td>${approvedAtText}</td><td>${attachLink}</td></tr>`;
+            return `<tr>
+                <td>${new Date(req.createdAt).toLocaleDateString()}</td>
+                <td>${escapeHtml(typeDisplay)}</td>
+                <td>${req.startDate} ~ ${req.endDate}</td>
+                <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
+                <td>${escapeHtml(req.reason)}</td>
+                <td>${statusText}</td>
+                <td>${approvedByText}</td>
+                <td>${approvedAtText}</td>
+                <td>${attachLink}</td>
+            </tr>`;
         }).join('');
         const html = `
             <div class="info-panel">
                 <div class="user-greeting"><div class="avatar">${emp.name.charAt(0)}</div>
                 <div><h2>${escapeHtml(emp.name)}</h2><p>${escapeHtml(emp.department)} · 工号 ${emp.id}<br>📅 入职日期: ${emp.startDate}</p></div></div>
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${formatDisplay(currentYearEnt)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${formatAnnual(currentYearEntRaw)} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">📦 上年结转年假 / Carry-over</div><div class="stat-number">${carryOver} 天 / days</div></div>
-                    <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${formatDisplay(totalAnnual)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${formatAnnual(totalAnnualRaw)} 天 / days</div></div>
                 </div>
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-label">✅ 已休年假 / Annual Taken</div><div class="stat-number">${annualUsed} 天 / days</div></div>
-                    <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${formatDisplay(remainingAnnual)} 天 / days</div></div>
+                    <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${formatRemaining(remainingAnnualRaw)} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">🤒 病假总额 / Sick Leave Entitlement</div><div class="stat-number">${sickTotal} 天 / days</div></div>
                 </div>
                 <div class="stats-grid">
@@ -584,9 +600,9 @@
                     <strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。
                 </div>
                 <h3>📋 我的休假记录 / My Leave Records</h3>
-                <table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody></table>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody><table></div>
                 <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
-                <table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></table></thead><tbody>${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}</tbody></table>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></tr></thead><tbody>${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}</tbody></table></div>
                 <div class="weekday-note">* 请假天数计算规则：周日全天不计，周六只算0.5天，周一至周五各算1天。</div>
             </div>
         `;
@@ -679,16 +695,15 @@
             if (isNaN(days) || days <= 0) days = calculateWorkDays(startDate, endDate);
             if (days <= 0) { alert("有效天数为0，请重新选择日期"); return; }
 
-            // 余额检查
             if (type === 'annual') {
                 const remaining = await getRemainingAnnualDays(emp.id);
-                if (days > remaining) {
+                if (days > remaining + 0.001) {
                     alert(`年假余额不足！剩余年假为 ${remaining.toFixed(1)} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`);
                     return;
                 }
             } else if (type === 'sick') {
                 const remainingSick = await getRemainingSickDays(emp.id);
-                if (days > remainingSick) {
+                if (days > remainingSick + 0.001) {
                     alert(`病假余额不足！剩余病假为 ${remainingSick} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`);
                     return;
                 }
@@ -758,7 +773,7 @@
         win.document.close();
     }
 
-    // ==================== 审批相关函数（完整，与之前相同） ====================
+    // ==================== 审批相关函数 ====================
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -825,7 +840,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (pending.length === 0) { container.innerHTML = "<p>暂无待审批申请</p>"; return; }
-        let html = `<table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
         for (let req of pending) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -838,13 +853,13 @@
                 <td>${escapeHtml(empName)}</td>
                 <td>${escapeHtml(typeDisplay)}</td>
                 <td>${req.startDate} ~ ${req.endDate}</td>
-                <td>${req.days}</td>
+                <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
                 <td>${escapeHtml(req.reason)}</td>
                 <td>${attachLink}</td>
                 <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td>
             </tr>`;
         }
-        html += `</tbody></table>`;
+        html += `</tbody></table></div>`;
         container.innerHTML = html;
         window.approveRequestWrapper = async (rid) => {
             let approver = null;
@@ -873,7 +888,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (approved.length === 0) { container.innerHTML = "<p>暂无审批记录</p>"; return; }
-        let html = `<table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></td></thead><tbody>`;
         for (let req of approved) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -883,11 +898,11 @@
             else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const result = req.status === 'approved' ? '批准' : '拒绝';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<tr>
+            html += `<table>
                 <td>${escapeHtml(empName)}</td>
                 <td>${escapeHtml(typeDisplay)}</td>
                 <td>${req.startDate} ~ ${req.endDate}</td>
-                <td>${req.days}</td>
+                <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
                 <td>${result}</td>
                 <td>${req.approvedByName || '-'}</td>
                 <td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td>
@@ -895,56 +910,64 @@
                 <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td>
             </tr>`;
         }
-        html += `</tbody></table>`;
+        html += `</tbody></table></div>`;
         container.innerHTML = html;
         window.deleteRequest = deleteRequest;
     }
+    
+    // ==================== 关键：管理员表格（已修复按钮显示问题） ====================
     async function renderAdminTable() {
         const emps = await loadEmployees();
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>
-            <th>工号 / ID</th><th>姓名 / Name</th><th>部门 / Dept</th><th>入职日期 / Start Date</th>
-            <th>当年应得 / Current Year</th><th>上年结转 / Carry-over</th><th>年假总额 / Total Annual</th>
-            <th>已休年假 / Annual Taken</th><th>剩余年假 / Remaining Annual</th>
-            <th>病假总额 / Sick Total</th><th>已休病假 / Sick Taken</th><th>剩余病假 / Remaining Sick</th>
-            <th>本年无薪假 / Unpaid</th><th>审批人</th><th>操作 / Actions</th>
-        </tr></thead><tbody>`;
+        const headers = [
+            "工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date",
+            "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual",
+            "已休年假 / Annual Taken", "剩余年假 / Remaining Annual",
+            "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick",
+            "本年无薪假 / Unpaid", "审批人", "操作 / Actions"
+        ];
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>`;
+        for (let h of headers) {
+            html += `<th>${escapeHtml(h)}</th>`;
+        }
+        html += `</thead><tbody>`;
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
-            const currentYearEnt = getCurrentYearEntitlementRaw(emp.startDate);
+            const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
             const carryOver = emp.carryOverDays || 0;
-            const totalAnnual = currentYearEnt + carryOver;
+            const totalAnnualRaw = currentYearEntRaw + carryOver;
             const annualUsed = await getUsedDays(emp.id, 'annual');
-            const remainingAnnual = totalAnnual - annualUsed;
+            const remainingAnnualRaw = totalAnnualRaw - annualUsed;
             const sickTotal = emp.sickTotal || 14;
             const sickUsed = await getUsedDays(emp.id, 'sick');
             const remainingSick = sickTotal - sickUsed;
             const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
-            html += `<tr>
-                <td>${escapeHtml(emp.id)}</td>
-                <td>${escapeHtml(emp.name)}</td>
-                <td>${escapeHtml(emp.department)}</td>
-                <td>${emp.startDate}</td>
-                <td>${formatDisplay(currentYearEnt)}</td>
-                <td>${carryOver}</td>
-                <td>${formatDisplay(totalAnnual)}</td>
-                <td>${annualUsed}</td>
-                <td>${formatDisplay(remainingAnnual)}</td>
-                <td>${sickTotal}</td>
-                <td>${sickUsed}</td>
-                <td>${remainingSick}</td>
-                <td>${unpaidThisYear}</td>
-                <td>${emp.isApprover ? '是' : '否'}</td>
-                <td class="action-btns">
-                    <button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
-                    <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
-                    <button class="btn btn-danger btn-sm" onclick="deleteEmployeeFirestore('${emp.id}')">删除</button>
-                </td>
-            </tr>`;
+            const cells = [
+                emp.id, emp.name, emp.department, emp.startDate,
+                formatAnnual(currentYearEntRaw), carryOver, formatAnnual(totalAnnualRaw),
+                annualUsed, formatRemaining(remainingAnnualRaw),
+                sickTotal, sickUsed, remainingSick,
+                unpaidThisYear, emp.isApprover ? '是' : '否',
+                `<button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
+                 <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
+                 <button class="btn btn-danger btn-sm" onclick="deleteEmployeeFirestore('${emp.id}')">删除</button>`
+            ];
+            html += `<tr>`;
+            for (let i = 0; i < cells.length; i++) {
+                let cell = cells[i];
+                // 最后一列（操作列）不转义
+                if (i === cells.length - 1) {
+                    html += `<td>${cell}</td>`;
+                } else {
+                    html += `<td>${typeof cell === 'number' ? cell : escapeHtml(cell)}</td>`;
+                }
+            }
+            html += `</tr>`;
         }
-        html += `</tbody></table></div><button class="btn btn-secondary btn-sm" id="refreshAdminTable">🔄 刷新</button>`;
+        html += `</tbody></tr></div><button class="btn btn-secondary btn-sm" id="refreshAdminTable">🔄 刷新</button>`;
         document.getElementById("adminTableContainer").innerHTML = html;
         document.getElementById("refreshAdminTable")?.addEventListener("click", () => { renderAdminTable(); renderPendingAndHistory(); });
     }
+
     async function renderPendingAndHistory() {
         await renderPendingRequests('pendingRequestsContainer');
         await renderApprovalHistory('approvalHistoryContainer');
@@ -954,7 +977,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // ==================== 管理员其他功能（manageRecords, openEmployeeEdit, deleteEmployee等） ====================
+    // 管理员管理休假记录
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -969,12 +992,15 @@
                 else typeLabel = rec.type;
                 const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
                 return `<tr>
-                    <td>${rec.date}</td><td>${typeLabel}</td><td>${rec.days}</td><td>${attachHtml}</td>
+                    <td>${rec.date}</td>
+                    <td>${typeLabel}</td>
+                    <td>${rec.days}${rec.days % 1 === 0 ? '' : ''}</td>
+                    <td>${attachHtml}</td>
                     <td><button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td>
                 </tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
-                <table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table></div>
                 <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <input type="date" id="newDate" style="flex:1;"><select id="newType" style="flex:1;"><option value="annual">年假</option><option value="sick">病假</option><option value="unpaid">无薪假</option><option value="other">其他</option></select>
                     <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1;">
@@ -1027,6 +1053,7 @@
         attachEvents();
     };
 
+    // 编辑员工（增加手动年假字段）
     window.openEmployeeEdit = async function(empId) {
         const emps = await loadEmployees();
         const emp = emps.find(e => e.id === empId);
@@ -1039,6 +1066,7 @@
             <div class="form-group"><label>入职日期</label><input type="date" id="editStartDate" value="${emp.startDate}"></div>
             <div class="form-group"><label>上年结转年假 (天)</label><input type="number" id="editCarryOver" step="0.5" value="${emp.carryOverDays || 0}"></div>
             <div class="form-group"><label>病假总额 (天)</label><input type="number" id="editSickTotal" step="0.5" value="${emp.sickTotal || 14}"></div>
+            <div class="form-group"><label>手动年假（天，留空则自动计算）</label><input type="number" id="editManualAnnual" step="0.5" value="${emp.manualAnnual !== undefined && emp.manualAnnual !== null ? emp.manualAnnual : ''}" placeholder="留空则自动计算"></div>
             <div class="form-group"><label><input type="checkbox" id="editIsApprover" ${emp.isApprover ? 'checked' : ''}> 拥有审批权限</label></div>
             <div style="display:flex; justify-content:flex-end; gap:12px;"><button class="btn btn-secondary" id="closeModal">取消</button><button class="btn btn-primary" id="saveEdit">保存</button></div>
         </div>`;
@@ -1051,6 +1079,12 @@
             emp.startDate = document.getElementById('editStartDate').value;
             emp.carryOverDays = parseFloat(document.getElementById('editCarryOver').value);
             emp.sickTotal = parseFloat(document.getElementById('editSickTotal').value);
+            const manual = document.getElementById('editManualAnnual').value;
+            if (manual !== null && manual !== undefined && manual !== '') {
+                emp.manualAnnual = parseFloat(manual);
+            } else {
+                emp.manualAnnual = null;
+            }
             emp.isApprover = document.getElementById('editIsApprover').checked;
             if (!emp.name || !emp.department || !emp.password || !emp.startDate || isNaN(emp.carryOverDays) || isNaN(emp.sickTotal)) alert("请填写完整");
             else {
@@ -1101,7 +1135,7 @@
             if(!id || !name || !dept || !pwd || !startDate || isNaN(carryOver) || isNaN(sickTotal)) { alert("请完整填写"); return; }
             const emps = await loadEmployees();
             if(emps.find(e=>e.id===id)) { alert("工号已存在"); return; }
-            const newEmp = { id, name, department: dept, password: pwd, role: "user", startDate, sickTotal, carryOverDays: carryOver, isApprover };
+            const newEmp = { id, name, department: dept, password: pwd, role: "user", startDate, sickTotal, carryOverDays: carryOver, isApprover, manualAnnual: null };
             await saveEmployee(newEmp);
             await renderAdminTable();
             modal.remove();
@@ -1114,16 +1148,16 @@
         const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${currentYear})`]];
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
-            const currentYearEnt = getCurrentYearEntitlementRaw(emp.startDate);
+            const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
             const carryOver = emp.carryOverDays || 0;
-            const totalAnnual = currentYearEnt + carryOver;
+            const totalAnnualRaw = currentYearEntRaw + carryOver;
             const annualUsed = await getUsedDays(emp.id, 'annual');
-            const remainingAnnual = totalAnnual - annualUsed;
+            const remainingAnnualRaw = totalAnnualRaw - annualUsed;
             const sickTotal = emp.sickTotal || 14;
             const sickUsed = await getUsedDays(emp.id, 'sick');
             const remainingSick = sickTotal - sickUsed;
             const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
-            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEnt.toFixed(1), carryOver, totalAnnual.toFixed(1), annualUsed, remainingAnnual.toFixed(1), sickTotal, sickUsed, remainingSick, unpaidThisYear]);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEntRaw.toFixed(1), carryOver, totalAnnualRaw.toFixed(1), annualUsed, remainingAnnualRaw.toFixed(1), sickTotal, sickUsed, remainingSick, unpaidThisYear]);
         }
         const ws = XLSX.utils.aoa_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
@@ -1131,42 +1165,38 @@
         XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
     }
 
-    // 强制同步完整员工数据
     async function syncFullEmployeeData() {
         if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
         const fullList = [
-            { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false },
-            { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true },
-            { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false },
-            { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false }
+            { id: "S1328764C", name: "Alan Tan Tiong Sing", department: "Van driver", startDate: "2018-08-17", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G7768030L", name: "Lee Wee boon", department: "Planner", startDate: "2020-04-07", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "S6849634I", name: "Ho Siak Kwang", department: "Lorry Attendant", startDate: "2020-08-20", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G5194592T", name: "Saw Myaing Win", department: "Warehouse Supervisor", startDate: "2021-09-13", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G2877968U", name: "Chua Kai Loon", department: "14 ft driver", startDate: "2022-07-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G2720866K", name: "Zhang Yun Long", department: "14 ft driver", startDate: "2022-10-03", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "S1507617H", name: "Hussain Bin Masjuni", department: "Lorry Attendant", startDate: "2023-10-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "S8602848D", name: "Muhammad Nazri Bin Bakri", department: "Lorry Attendant", startDate: "2023-11-27", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G8976065N", name: "Pirathip Kumar A/L Krishna Chandran", department: "Lorry Attendant", startDate: "2024-09-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G3464967M", name: "ZHANG YINAN", department: "24 ft driver", startDate: "2025-04-30", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G2963634L", name: "Mahatevan Vyraperumal", department: "Warehouse Assistant", startDate: "2025-08-26", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null },
+            { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true, manualAnnual: null },
+            { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false, manualAnnual: null },
+            { id: "admin", name: "管理员 / Administrator", department: "System", password: "admin123", role: "admin", startDate: "2020-01-01", sickTotal: 0, carryOverDays: 0, isApprover: false, manualAnnual: null }
         ];
-        // 清空所有集合
         const allEmps = await employeesCollection.get();
         for (const doc of allEmps.docs) await doc.ref.delete();
         const allRecords = await leaveRecordsCollection.get();
         for (const doc of allRecords.docs) await doc.ref.delete();
         const allReqs = await leaveRequestsCollection.get();
         for (const doc of allReqs.docs) await doc.ref.delete();
-        // 导入员工
         for (let emp of fullList) await saveEmployee(emp);
-        // 导入示例休假记录
         const sampleRecords = [
             { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
             { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
@@ -1280,7 +1310,6 @@
         else alert("无附件");
     };
 
-    // 启动自动检查数据完整性
     (async function autoCheckAndSync() {
         const emps = await loadEmployees();
         if (emps.length < 20) {
@@ -1291,7 +1320,6 @@
         }
     })();
 
-    // 绑定事件
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
     document.getElementById('empLogoutBtn')?.addEventListener('click', logout);
     document.getElementById('approverLogoutBtn')?.addEventListener('click', logout);
