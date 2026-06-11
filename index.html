@@ -343,10 +343,10 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // ==================== EmailJS 配置（已填好） ====================
+    // ==================== EmailJS 配置（已更新 Public Key） ====================
     const EMAILJS_SERVICE_ID = "service_9day31x";
     const EMAILJS_TEMPLATE_ID = "template_lcij727";
-    const EMAILJS_PUBLIC_KEY = "eznVJ93uuk7QCwUV";
+    const EMAILJS_PUBLIC_KEY = "44mQzjQWCDOTimX1x";
     emailjs.init(EMAILJS_PUBLIC_KEY);
 
     const employeesCollection = db.collection("employees");
@@ -653,7 +653,7 @@
         win.document.close();
     }
 
-    // ==================== 审批相关函数（完整） ====================
+    // ==================== 审批相关函数 ====================
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -785,7 +785,7 @@
             html += `<tr><td>${escapeHtml(emp.id)}</td><td>${escapeHtml(emp.name)}</td><td>${escapeHtml(emp.department)}</td><td>${emp.startDate}</td>
             <td>${currentYearEnt}</td><td>${carryOver}</td><td>${totalAnnual}</td><td>${annualUsed}</td><td>${sickTotal}</td><td>${sickUsed}</td>
             <td>${unpaidThisYear}</td><td>${emp.isApprover ? '是' : '否'}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
+            <td class="action-btns"><button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
             <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
             <button class="btn btn-danger btn-sm" onclick="deleteEmployeeFirestore('${emp.id}')">删除</button></td></tr>`;
         }
@@ -802,7 +802,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理员编辑员工、休假记录管理等（与之前一致）
+    // 管理员编辑员工、休假记录管理等
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
