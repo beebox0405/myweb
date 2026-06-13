@@ -175,23 +175,29 @@
         .table-wrapper {
             overflow-x: auto;
             margin-top: 16px;
+            border: 1px solid #cfdfed;
+            border-radius: 16px;
+            background: white;
         }
         .leave-table {
             width: 100%;
             border-collapse: collapse;
-            border: 1px solid #cfdfed;
-            min-width: 1300px;
+            min-width: 600px;
         }
         .leave-table th, .leave-table td {
             border: 1px solid #cfdfed;
             padding: 10px 8px;
             text-align: left;
             vertical-align: top;
-            white-space: nowrap;
+            background-color: white;
         }
         .leave-table th {
             background: #eef4fa;
             font-weight: 700;
+        }
+        /* 确保表格行不重叠 */
+        .leave-table tr {
+            display: table-row;
         }
         .modal {
             position: fixed;
@@ -262,19 +268,9 @@
             .stats-grid { flex-direction: column; }
         }
         @media print {
-            body * {
-                visibility: hidden;
-            }
-            .printable-form, .printable-form * {
-                visibility: visible;
-            }
-            .printable-form {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                padding: 20px;
-            }
+            body * { visibility: hidden; }
+            .printable-form, .printable-form * { visibility: visible; }
+            .printable-form { position: absolute; top: 0; left: 0; width: 100%; padding: 20px; }
         }
     </style>
 </head>
@@ -362,99 +358,74 @@
         if (value === undefined || value === null) return '0';
         const floorVal = Math.floor(value);
         const decimal = value - floorVal;
-        if (Math.abs(decimal - 0.5) < 1e-9) {
-            return value.toFixed(1);
-        } else if (decimal > 0.5) {
-            return Math.ceil(value);
-        } else {
-            return floorVal;
-        }
+        if (Math.abs(decimal - 0.5) < 1e-9) return value.toFixed(1);
+        else if (decimal > 0.5) return Math.ceil(value);
+        else return floorVal;
     }
-
     function formatAnnual(value) {
         if (value === undefined || value === null) return '0';
         return Math.round(value);
     }
-
-    function calculateWorkDays(startDateStr, endDateStr) {
-        let start = new Date(startDateStr);
-        let end = new Date(endDateStr);
-        let days = 0;
-        let current = new Date(start);
-        while (current <= end) {
-            const dayOfWeek = current.getDay();
-            if (dayOfWeek === 0) { /* 周日不计 */ }
-            else if (dayOfWeek === 6) { days += 0.5; }
-            else { days += 1; }
-            current.setDate(current.getDate() + 1);
+    function calculateWorkDays(start, end) {
+        let s = new Date(start), e = new Date(end), days = 0, cur = new Date(s);
+        while (cur <= e) {
+            const dow = cur.getDay();
+            if (dow === 0) { /* Sunday */ }
+            else if (dow === 6) days += 0.5;
+            else days += 1;
+            cur.setDate(cur.getDate() + 1);
         }
         return days;
     }
 
-    // ==================== 年假计算（自动） ====================
+    // 年假自动计算
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
-
-    function getCurrentWorkYearStart(startDateStr, referenceDate = new Date()) {
+    function getCurrentWorkYearStart(startDateStr, ref = new Date()) {
         const start = new Date(startDateStr);
-        const lastDay = getLastDayOfMonth(referenceDate);
-        let anniversary = 0;
-        let temp = new Date(start);
+        const lastDay = getLastDayOfMonth(ref);
+        let anniv = 0, temp = new Date(start);
         while (true) {
             let next = new Date(temp);
             next.setFullYear(temp.getFullYear() + 1);
-            if (next <= lastDay) {
-                anniversary++;
-                temp = next;
-            } else break;
+            if (next <= lastDay) { anniv++; temp = next; }
+            else break;
         }
         const currentYearStart = new Date(start);
-        currentYearStart.setFullYear(start.getFullYear() + anniversary);
+        currentYearStart.setFullYear(start.getFullYear() + anniv);
         return currentYearStart;
     }
-
-    function getFullMonthsBetween(startDate, endDate) {
-        if (startDate > endDate) return 0;
-        let years = endDate.getFullYear() - startDate.getFullYear();
-        let months = endDate.getMonth() - startDate.getMonth();
-        let totalMonths = years * 12 + months;
-        if (endDate.getDate() < startDate.getDate()) {
-            totalMonths--;
-        }
-        return totalMonths;
+    function getFullMonthsBetween(s, e) {
+        if (s > e) return 0;
+        let months = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth());
+        if (e.getDate() < s.getDate()) months--;
+        return months;
     }
-
-    function getCompletedMonthsInCurrentYear(startDateStr, referenceDate = new Date()) {
-        const workYearStart = getCurrentWorkYearStart(startDateStr, referenceDate);
-        const lastDay = getLastDayOfMonth(referenceDate);
+    function getCompletedMonthsInCurrentYear(startDateStr, ref = new Date()) {
+        const workYearStart = getCurrentWorkYearStart(startDateStr, ref);
+        const lastDay = getLastDayOfMonth(ref);
         if (lastDay < workYearStart) return 0;
         return getFullMonthsBetween(workYearStart, lastDay);
     }
-
-    function getServiceYearIndex(startDateStr, referenceDate = new Date()) {
+    function getServiceYearIndex(startDateStr, ref = new Date()) {
         const start = new Date(startDateStr);
-        const lastDay = getLastDayOfMonth(referenceDate);
+        const lastDay = getLastDayOfMonth(ref);
         if (lastDay < start) return 0;
-        let anniversaries = 0;
-        let temp = new Date(start);
+        let anniv = 0, temp = new Date(start);
         while (true) {
             let next = new Date(temp);
             next.setFullYear(temp.getFullYear() + 1);
-            if (next <= lastDay) {
-                anniversaries++;
-                temp = next;
-            } else break;
+            if (next <= lastDay) { anniv++; temp = next; }
+            else break;
         }
-        return anniversaries + 1;
+        return anniv + 1;
     }
-
     function getBaseAnnualLeave(yearIndex) {
         if (yearIndex <= 0) return 0;
         if (yearIndex <= 7) return [0,7,8,9,10,11,12,13][yearIndex];
         return 14;
     }
-
     function getAutoCurrentYearEntitlement(startDateStr) {
         if (!startDateStr) return 0;
         const today = new Date();
@@ -464,26 +435,21 @@
         if (totalMonths < 3) return 0;
         const yearIndex = getServiceYearIndex(startDateStr, today);
         if (yearIndex <= 0) return 0;
-        const baseDays = getBaseAnnualLeave(yearIndex);
-        const completedMonths = getCompletedMonthsInCurrentYear(startDateStr, today);
-        if (completedMonths >= 12) return baseDays;
-        let proRated = (completedMonths / 12) * baseDays;
-        return Math.round(proRated * 10) / 10;
+        const base = getBaseAnnualLeave(yearIndex);
+        const completed = getCompletedMonthsInCurrentYear(startDateStr, today);
+        if (completed >= 12) return base;
+        let pro = (completed / 12) * base;
+        return Math.round(pro * 10) / 10;
     }
-
     function getCurrentYearEntitlementRaw(emp) {
-        if (emp.manualAnnual !== undefined && emp.manualAnnual !== null && emp.manualAnnual > 0) {
-            return emp.manualAnnual;
-        }
+        if (emp.manualAnnual && emp.manualAnnual > 0) return emp.manualAnnual;
         return getAutoCurrentYearEntitlement(emp.startDate);
     }
-
     function getTotalAnnualEntitlementRaw(emp) {
         const current = getCurrentYearEntitlementRaw(emp);
         const carry = emp.carryOverDays || 0;
         return current + carry;
     }
-
     async function getRemainingAnnualDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -491,7 +457,6 @@
         const used = await getUsedDays(empId, "annual");
         return total - used;
     }
-
     async function getRemainingSickDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
@@ -503,14 +468,20 @@
     // 数据操作
     async function loadEmployees() { const snap = await employeesCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveEmployee(emp) { await employeesCollection.doc(emp.id).set(emp); }
-    async function deleteEmployeeFirestore(empId) { await employeesCollection.doc(empId).delete(); }
+    async function deleteEmployeeFirestore(empId) {
+        const records = (await loadLeaveRecords()).filter(r => r.empId === empId);
+        for (let rec of records) await deleteLeaveRecordById(rec.id);
+        const requests = (await loadLeaveRequests()).filter(r => r.empId === empId);
+        for (let req of requests) await deleteLeaveRequest(req.id);
+        await employeesCollection.doc(empId).delete();
+    }
     async function loadLeaveRecords() { const snap = await leaveRecordsCollection.get(); return snap.docs.map(d => d.data()); }
-    async function addLeaveRecord(empId, type, date, days, attachmentBase64, attachmentName) {
-        const record = { id: genId(), empId, type, date, days: parseFloat(days), attachment: attachmentBase64 || null, attachmentName, createdAt: new Date().toISOString() };
+    async function addLeaveRecord(empId, type, date, days, attachBase64, attachName) {
+        const record = { id: genId(), empId, type, date, days: parseFloat(days), attachment: attachBase64 || null, attachmentName: attachName, createdAt: new Date().toISOString() };
         await leaveRecordsCollection.doc(record.id).set(record);
         return record.id;
     }
-    async function deleteLeaveRecordById(recordId) { await leaveRecordsCollection.doc(recordId).delete(); }
+    async function deleteLeaveRecordById(rid) { await leaveRecordsCollection.doc(rid).delete(); }
     async function loadLeaveRequests() { const snap = await leaveRequestsCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveLeaveRequest(req) { await leaveRequestsCollection.doc(req.id).set(req); }
     async function deleteLeaveRequest(reqId) { await leaveRequestsCollection.doc(reqId).delete(); }
@@ -519,12 +490,12 @@
         return records.filter(r => r.empId === empId && r.type === type).reduce((sum, r) => sum + r.days, 0);
     }
     async function getCurrentYearUnpaidDays(empId) {
-        const currentYear = new Date().getFullYear();
+        const curYear = new Date().getFullYear();
         const records = await loadLeaveRecords();
-        return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === currentYear).reduce((sum, r) => sum + r.days, 0);
+        return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === curYear).reduce((sum, r) => sum + r.days, 0);
     }
 
-    // 渲染员工卡片
+    // 渲染员工卡片 - 修复了休假记录表格
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
@@ -537,6 +508,7 @@
         const remainingSick = sickTotal - sickUsed;
         const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
         const records = (await loadLeaveRecords()).filter(r => r.empId === emp.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+        // 修复：确保每条记录单独一行
         const recordRows = records.map(r => {
             let typeLabel = '';
             if (r.type === 'annual') typeLabel = '年假 / Annual';
@@ -600,9 +572,42 @@
                     <strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。
                 </div>
                 <h3>📋 我的休假记录 / My Leave Records</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期 / Date</th><th>类型 / Type</th><th>天数 / Days</th><th>附件 / Attachment</th></tr></thead><tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody><table></div>
+                <div class="table-wrapper">
+                    <table class="leave-table">
+                        <thead>
+                            <tr>
+                                <th>日期 / Date</th>
+                                <th>类型 / Type</th>
+                                <th>天数 / Days</th>
+                                <th>附件 / Attachment</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
                 <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>申请日期</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>状态</th><th>审批人</th><th>审批时间</th><th>附件</th></tr></thead><tbody>${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}</tbody></table></div>
+                <div class="table-wrapper">
+                    <table class="leave-table">
+                        <thead>
+                            <tr>
+                                <th>申请日期</th>
+                                <th>类型</th>
+                                <th>日期范围</th>
+                                <th>天数</th>
+                                <th>理由</th>
+                                <th>状态</th>
+                                <th>审批人</th>
+                                <th>审批时间</th>
+                                <th>附件</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}
+                        </tbody>
+                    </table>
+                </div>
                 <div class="weekday-note">* 请假天数计算规则：周日全天不计，周六只算0.5天，周一至周五各算1天。</div>
             </div>
         `;
@@ -626,23 +631,14 @@
                         <option value="other">其他假期 / Other</option>
                     </select>
                 </div>
-                <div id="customTypeGroup" class="form-group" style="display:none;">
-                    <label>请填写具体假期名称 / Please specify leave name</label>
-                    <input type="text" id="customLeaveType" placeholder="例如: 婚假 / Marriage Leave">
-                </div>
+                <div id="customTypeGroup" class="form-group" style="display:none;"><label>请填写具体假期名称 / Please specify leave name</label><input type="text" id="customLeaveType" placeholder="例如: 婚假 / Marriage Leave"></div>
                 <div class="form-group"><label>开始日期 / Start Date</label><input type="date" id="reqStartDate" min="${today}"></div>
                 <div class="form-group"><label>结束日期 / End Date</label><input type="date" id="reqEndDate" min="${today}"></div>
                 <div class="form-group"><label>天数 / Days (自动按周末规则计算)</label><input type="number" id="reqDays" step="0.5" placeholder="自动计算"></div>
                 <div class="form-group"><label>理由 / Reason</label><textarea id="reqReason" rows="3"></textarea></div>
                 <div class="form-group"><label>附件 / Attachment</label><input type="file" id="reqFile"></div>
-                <div class="notice-advance">
-                    <strong>NOTED:</strong> PLEASE SUBMIT THE LEAVE FORM IN ADVANCE FOR AT LEAST THREE (3) WORKING DAYS.<br>
-                    <strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。
-                </div>
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 10px;">
-                    <button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button>
-                    <div><button class="btn btn-secondary" id="closeReqModal">取消</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left: 10px;">提交申请</button></div>
-                </div>
+                <div class="notice-advance"><strong>NOTED:</strong> PLEASE SUBMIT THE LEAVE FORM IN ADVANCE FOR AT LEAST THREE (3) WORKING DAYS.<br><strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。</div>
+                <div style="display:flex; justify-content:space-between; margin-top:10px;"><button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button><div><button class="btn btn-secondary" id="closeReqModal">取消</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left:10px;">提交申请</button></div></div>
                 <div class="weekday-note">* 周日全天不计，周六0.5天，周一至周五1天。</div>
             </div>
         `;
@@ -651,37 +647,25 @@
         const customGroup = document.getElementById('customTypeGroup');
         const customInput = document.getElementById('customLeaveType');
         typeSelect.addEventListener('change', () => {
-            if (typeSelect.value === 'other') {
-                customGroup.style.display = 'block';
-            } else {
-                customGroup.style.display = 'none';
-                customInput.value = '';
-            }
+            if (typeSelect.value === 'other') customGroup.style.display = 'block';
+            else { customGroup.style.display = 'none'; customInput.value = ''; }
         });
         const startDateInput = document.getElementById('reqStartDate');
         const endDateInput = document.getElementById('reqEndDate');
         const daysInput = document.getElementById('reqDays');
         const updateDays = () => {
-            if (startDateInput.value && endDateInput.value) {
-                const days = calculateWorkDays(startDateInput.value, endDateInput.value);
-                daysInput.value = days;
-            }
+            if (startDateInput.value && endDateInput.value) daysInput.value = calculateWorkDays(startDateInput.value, endDateInput.value);
         };
         startDateInput.addEventListener('change', updateDays);
         endDateInput.addEventListener('change', updateDays);
         document.getElementById('closeReqModal').onclick = () => modal.remove();
         document.getElementById('submitReqBtn').onclick = async () => {
-            let type = typeSelect.value;
-            let customLeaveType = null;
+            let type = typeSelect.value, customLeaveType = null;
             if (type === 'other') {
                 customLeaveType = customInput.value.trim();
-                if (!customLeaveType) {
-                    alert("请填写具体假期名称");
-                    return;
-                }
+                if (!customLeaveType) { alert("请填写具体假期名称"); return; }
             }
-            const startDate = startDateInput.value;
-            const endDate = endDateInput.value;
+            const startDate = startDateInput.value, endDate = endDateInput.value;
             let days = parseFloat(daysInput.value);
             const reason = document.getElementById('reqReason').value;
             const fileInput = document.getElementById('reqFile');
@@ -694,21 +678,13 @@
             if (!startDate || !endDate || !reason) { alert("请填写开始日期、结束日期和理由"); return; }
             if (isNaN(days) || days <= 0) days = calculateWorkDays(startDate, endDate);
             if (days <= 0) { alert("有效天数为0，请重新选择日期"); return; }
-
             if (type === 'annual') {
                 const remaining = await getRemainingAnnualDays(emp.id);
-                if (days > remaining + 0.001) {
-                    alert(`年假余额不足！剩余年假为 ${remaining.toFixed(1)} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`);
-                    return;
-                }
+                if (days > remaining + 0.001) { alert(`年假余额不足！剩余年假为 ${remaining.toFixed(1)} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`); return; }
             } else if (type === 'sick') {
                 const remainingSick = await getRemainingSickDays(emp.id);
-                if (days > remainingSick + 0.001) {
-                    alert(`病假余额不足！剩余病假为 ${remainingSick} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`);
-                    return;
-                }
+                if (days > remainingSick + 0.001) { alert(`病假余额不足！剩余病假为 ${remainingSick} 天，您申请了 ${days} 天。请减少天数或选择无薪假。`); return; }
             }
-
             const newRequest = {
                 id: genId(), empId: emp.id, type, customLeaveType, startDate, endDate, days, reason,
                 status: "pending", attachment: attachmentBase64, attachmentName,
@@ -720,18 +696,11 @@
             else if (type === 'other' && customLeaveType) displayType = customLeaveType;
             try {
                 await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-                    employeeName: emp.name,
-                    employeeId: emp.id,
-                    leaveType: displayType,
-                    startDate: startDate,
-                    endDate: endDate,
-                    days: days,
-                    reason: reason
+                    employeeName: emp.name, employeeId: emp.id, leaveType: displayType,
+                    startDate, endDate, days, reason
                 });
                 console.log("邮件通知已发送");
-            } catch (error) {
-                console.error("邮件发送失败，但申请已保存", error);
-            }
+            } catch (error) { console.error("邮件发送失败，但申请已保存", error); }
             modal.remove();
             alert("申请已提交");
             if (currentUser && currentUser.id === emp.id) {
@@ -745,35 +714,11 @@
 
     function openLeaveForm(emp) {
         const win = window.open('', '_blank');
-        win.document.write(`
-            <html><head><title>BEEBOX LEAVE FORM</title><style>
-                body { font-family: Arial; padding:40px; max-width:800px; margin:auto; }
-                .form-header { text-align:center; margin-bottom:30px; }
-                .form-header h1 { color:#0a2b3e; }
-                .form-section { margin-bottom:20px; }
-                label { font-weight:bold; display:block; margin-bottom:5px; }
-                .field { border-bottom:1px solid #ccc; padding:8px; margin-bottom:15px; }
-                .sign-line { margin-top:40px; display:flex; justify-content:space-between; }
-                .btn-print { background:#1d5b8e; color:white; padding:10px 20px; border:none; cursor:pointer; margin-top:30px; border-radius:30px; }
-                @media print { .btn-print { display:none; } }
-            </style></head>
-            <body>
-                <div class="form-header"><h1>📄 BEEBOX EXPRESS PTE LTD</h1><h2>Leave Application Form</h2></div>
-                <div class="form-section"><label>Employee Name:</label><div class="field">${escapeHtml(emp.name)}</div>
-                <label>Employee ID:</label><div class="field">${emp.id}</div>
-                <label>Department:</label><div class="field">${escapeHtml(emp.department)}</div></div>
-                <div class="form-section"><label>Leave Type:</label><div class="field">_________</div>
-                <label>Start Date:</label><div class="field">_________</div><label>End Date:</label><div class="field">_________</div>
-                <label>Number of Days:</label><div class="field">_________</div><label>Reason:</label><div class="field">_________</div></div>
-                <div class="sign-line"><div>Employee Signature: _________</div><div>Date: _________</div></div>
-                <div class="sign-line"><div>Approver Signature: _________</div><div>Date: _________</div></div>
-                <div style="text-align:center;"><button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button></div>
-            </body></html>
-        `);
+        win.document.write(`<html><head><title>BEEBOX LEAVE FORM</title><style>body{font-family:Arial;padding:40px;max-width:800px;margin:auto;}.form-header{text-align:center;margin-bottom:30px;}.form-header h1{color:#0a2b3e;}.form-section{margin-bottom:20px;}label{font-weight:bold;display:block;margin-bottom:5px;}.field{border-bottom:1px solid #ccc;padding:8px;margin-bottom:15px;}.sign-line{margin-top:40px;display:flex;justify-content:space-between;}.btn-print{background:#1d5b8e;color:white;padding:10px 20px;border:none;cursor:pointer;margin-top:30px;border-radius:30px;}@media print{.btn-print{display:none;}}</style></head><body><div class="form-header"><h1>📄 BEEBOX EXPRESS PTE LTD</h1><h2>Leave Application Form</h2></div><div class="form-section"><label>Employee Name:</label><div class="field">${escapeHtml(emp.name)}</div><label>Employee ID:</label><div class="field">${emp.id}</div><label>Department:</label><div class="field">${escapeHtml(emp.department)}</div></div><div class="form-section"><label>Leave Type:</label><div class="field">_________</div><label>Start Date:</label><div class="field">_________</div><label>End Date:</label><div class="field">_________</div><label>Number of Days:</label><div class="field">_________</div><label>Reason:</label><div class="field">_________</div></div><div class="sign-line"><div>Employee Signature: _________</div><div>Date: _________</div></div><div class="sign-line"><div>Approver Signature: _________</div><div>Date: _________</div></div><div style="text-align:center;"><button class="btn-print" onclick="window.print()">🖨️ Print / Save as PDF</button></div></body></html>`);
         win.document.close();
     }
 
-    // ==================== 审批相关函数 ====================
+    // 审批相关函数
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -840,7 +785,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (pending.length === 0) { container.innerHTML = "<p>暂无待审批申请</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead></tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
         for (let req of pending) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -888,7 +833,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (approved.length === 0) { container.innerHTML = "<p>暂无审批记录</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></td></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead></tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
         for (let req of approved) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -898,7 +843,7 @@
             else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             const result = req.status === 'approved' ? '批准' : '拒绝';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `<table>
+            html += `<tr>
                 <td>${escapeHtml(empName)}</td>
                 <td>${escapeHtml(typeDisplay)}</td>
                 <td>${req.startDate} ~ ${req.endDate}</td>
@@ -915,20 +860,12 @@
         window.deleteRequest = deleteRequest;
     }
     
-    // ==================== 关键：管理员表格（已修复按钮显示问题） ====================
+    // 管理员表格
     async function renderAdminTable() {
         const emps = await loadEmployees();
-        const headers = [
-            "工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date",
-            "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual",
-            "已休年假 / Annual Taken", "剩余年假 / Remaining Annual",
-            "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick",
-            "本年无薪假 / Unpaid", "审批人", "操作 / Actions"
-        ];
+        const headers = ["工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date", "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual", "已休年假 / Annual Taken", "剩余年假 / Remaining Annual", "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick", "本年无薪假 / Unpaid", "审批人", "操作 / Actions"];
         let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>`;
-        for (let h of headers) {
-            html += `<th>${escapeHtml(h)}</th>`;
-        }
+        for (let h of headers) html += `<th>${escapeHtml(h)}</th>`;
         html += `</thead><tbody>`;
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
@@ -949,24 +886,34 @@
                 unpaidThisYear, emp.isApprover ? '是' : '否',
                 `<button class="btn btn-primary btn-sm" onclick="openEmployeeEdit('${emp.id}')">✏️ 编辑</button>
                  <button class="btn btn-primary btn-sm" onclick="manageRecords('${emp.id}')">📋 休假记录</button>
-                 <button class="btn btn-danger btn-sm" onclick="deleteEmployeeFirestore('${emp.id}')">删除</button>`
+                 <button class="btn btn-danger btn-sm" onclick="deleteEmployeeFirestoreWrapper('${emp.id}')">删除</button>`
             ];
             html += `<tr>`;
             for (let i = 0; i < cells.length; i++) {
-                let cell = cells[i];
-                // 最后一列（操作列）不转义
-                if (i === cells.length - 1) {
-                    html += `<td>${cell}</td>`;
-                } else {
-                    html += `<td>${typeof cell === 'number' ? cell : escapeHtml(cell)}</td>`;
-                }
+                if (i === cells.length - 1) html += `<td>${cells[i]}</td>`;
+                else html += `<td>${typeof cells[i] === 'number' ? cells[i] : escapeHtml(cells[i])}</td>`;
             }
             html += `</tr>`;
         }
-        html += `</tbody></tr></div><button class="btn btn-secondary btn-sm" id="refreshAdminTable">🔄 刷新</button>`;
+        html += `</tbody></table></div><button class="btn btn-secondary btn-sm" id="refreshAdminTable">🔄 刷新</button>`;
         document.getElementById("adminTableContainer").innerHTML = html;
         document.getElementById("refreshAdminTable")?.addEventListener("click", () => { renderAdminTable(); renderPendingAndHistory(); });
     }
+
+    // 删除包装
+    window.deleteEmployeeFirestoreWrapper = async function(empId) {
+        if (confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)) {
+            try {
+                await deleteEmployeeFirestore(empId);
+                await renderAdminTable();
+                await renderPendingAndHistory();
+                alert("员工已删除");
+            } catch (error) {
+                console.error("删除失败", error);
+                alert("删除失败，请检查控制台错误或 Firebase 权限");
+            }
+        }
+    };
 
     async function renderPendingAndHistory() {
         await renderPendingRequests('pendingRequestsContainer');
@@ -977,7 +924,7 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理员管理休假记录
+    // 管理休假记录
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -1000,7 +947,7 @@
                 </tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table></div>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td>'}</tbody></table></div>
                 <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap:wrap;">
                     <input type="date" id="newDate" style="flex:1;"><select id="newType" style="flex:1;"><option value="annual">年假</option><option value="sick">病假</option><option value="unpaid">无薪假</option><option value="other">其他</option></select>
                     <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1;">
@@ -1019,33 +966,17 @@
             const dateInput = document.getElementById('newDate');
             const daysInput = document.getElementById('newDays');
             const autoCalcBtn = document.getElementById('autoCalcDaysBtn');
-            if (autoCalcBtn) {
-                autoCalcBtn.onclick = () => {
-                    if (dateInput.value) {
-                        const days = calculateWorkDays(dateInput.value, dateInput.value);
-                        daysInput.value = days;
-                    } else alert("请先选择日期");
-                };
-            }
+            if (autoCalcBtn) autoCalcBtn.onclick = () => { if (dateInput.value) daysInput.value = calculateWorkDays(dateInput.value, dateInput.value); else alert("请先选择日期"); };
             document.getElementById('addRecordBtn')?.addEventListener('click', async () => {
-                const date = dateInput.value;
-                const type = document.getElementById('newType').value;
-                let days = parseFloat(daysInput.value);
+                const date = dateInput.value, type = document.getElementById('newType').value, days = parseFloat(daysInput.value);
                 const fileInput = document.getElementById('newAttachment');
-                let attachmentBase64 = null, attachmentName = null;
-                if (fileInput.files.length > 0) {
-                    const file = fileInput.files[0];
-                    attachmentName = file.name;
-                    attachmentBase64 = await readFileAsBase64(file);
-                }
+                let attachBase64 = null, attachName = null;
+                if (fileInput.files.length > 0) { const f = fileInput.files[0]; attachName = f.name; attachBase64 = await readFileAsBase64(f); }
                 if(!date || isNaN(days) || days<=0){ alert("请填写完整日期和正数天数"); return; }
-                await addLeaveRecord(empId, type, date, days, attachmentBase64, attachmentName);
+                await addLeaveRecord(empId, type, date, days, attachBase64, attachName);
                 await refreshModal();
             });
-            window.deleteRecord = async (recId) => {
-                await deleteLeaveRecordById(recId);
-                await refreshModal();
-            };
+            window.deleteRecord = async (recId) => { await deleteLeaveRecordById(recId); await refreshModal(); };
             document.getElementById('closeRecordModal')?.addEventListener('click',()=>modal.remove());
         };
         modal.innerHTML = `<div class="modal-content" id="recordInner">${renderRecords()}</div>`;
@@ -1053,7 +984,7 @@
         attachEvents();
     };
 
-    // 编辑员工（增加手动年假字段）
+    // 编辑员工
     window.openEmployeeEdit = async function(empId) {
         const emps = await loadEmployees();
         const emp = emps.find(e => e.id === empId);
@@ -1080,11 +1011,8 @@
             emp.carryOverDays = parseFloat(document.getElementById('editCarryOver').value);
             emp.sickTotal = parseFloat(document.getElementById('editSickTotal').value);
             const manual = document.getElementById('editManualAnnual').value;
-            if (manual !== null && manual !== undefined && manual !== '') {
-                emp.manualAnnual = parseFloat(manual);
-            } else {
-                emp.manualAnnual = null;
-            }
+            if (manual !== null && manual !== undefined && manual !== '') emp.manualAnnual = parseFloat(manual);
+            else emp.manualAnnual = null;
             emp.isApprover = document.getElementById('editIsApprover').checked;
             if (!emp.name || !emp.department || !emp.password || !emp.startDate || isNaN(emp.carryOverDays) || isNaN(emp.sickTotal)) alert("请填写完整");
             else {
@@ -1093,19 +1021,6 @@
                 modal.remove();
             }
         };
-    };
-
-    window.deleteEmployeeFirestore = async function(empId) {
-        if (empId === 'admin') { alert("不能删除管理员"); return; }
-        if(confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)){
-            await deleteEmployeeFirestore(empId);
-            const records = (await loadLeaveRecords()).filter(r=>r.empId===empId);
-            for(let rec of records) await deleteLeaveRecordById(rec.id);
-            const requests = (await loadLeaveRequests()).filter(r=>r.empId===empId);
-            for(let req of requests) await deleteLeaveRequest(req.id);
-            await renderAdminTable();
-            await renderPendingAndHistory();
-        }
     };
 
     async function addEmployee() {
@@ -1144,20 +1059,20 @@
 
     async function exportToExcel() {
         const emps = await loadEmployees();
-        const currentYear = new Date().getFullYear();
-        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${currentYear})`]];
+        const curYear = new Date().getFullYear();
+        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假",`本年无薪假(${curYear})`]];
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
-            const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
-            const carryOver = emp.carryOverDays || 0;
-            const totalAnnualRaw = currentYearEntRaw + carryOver;
-            const annualUsed = await getUsedDays(emp.id, 'annual');
-            const remainingAnnualRaw = totalAnnualRaw - annualUsed;
+            const curEnt = getCurrentYearEntitlementRaw(emp);
+            const carry = emp.carryOverDays || 0;
+            const total = curEnt + carry;
+            const used = await getUsedDays(emp.id, 'annual');
+            const rem = total - used;
             const sickTotal = emp.sickTotal || 14;
             const sickUsed = await getUsedDays(emp.id, 'sick');
-            const remainingSick = sickTotal - sickUsed;
-            const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
-            exportData.push([emp.id, emp.name, emp.department, emp.startDate, currentYearEntRaw.toFixed(1), carryOver, totalAnnualRaw.toFixed(1), annualUsed, remainingAnnualRaw.toFixed(1), sickTotal, sickUsed, remainingSick, unpaidThisYear]);
+            const sickRem = sickTotal - sickUsed;
+            const unpaid = await getCurrentYearUnpaidDays(emp.id);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, curEnt, carry, total, used, rem, sickTotal, sickUsed, sickRem, unpaid]);
         }
         const ws = XLSX.utils.aoa_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
@@ -1209,9 +1124,7 @@
         if (sessionStorage.getItem('currentAdmin')) {
             await renderAdminTable();
             await renderPendingAndHistory();
-        } else {
-            window.location.reload();
-        }
+        } else window.location.reload();
     }
 
     // 视图切换
@@ -1315,9 +1228,7 @@
         if (emps.length < 20) {
             console.log("检测到员工数据不足，自动同步完整数据...");
             await syncFullEmployeeData();
-        } else {
-            await checkSession();
-        }
+        } else await checkSession();
     })();
 
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
