@@ -109,6 +109,8 @@
         .btn-sm {
             padding: 4px 12px;
             font-size: 0.75rem;
+            display: inline-block;
+            white-space: nowrap;
         }
         .error-msg {
             background: #fff4ea;
@@ -175,27 +177,46 @@
         .table-wrapper {
             overflow-x: auto;
             margin-top: 16px;
+            margin-bottom: 20px;
             border: 1px solid #cfdfed;
             border-radius: 16px;
             background: white;
         }
+        /* ========= 修复所有表格格子对不齐的核心样式 ========= */
         .leave-table {
+            table-layout: fixed;           /* 固定布局，列宽由表头或首行决定 */
             width: 100%;
             border-collapse: collapse;
-            min-width: 1200px;
+            min-width: 600px;              /* 保证在小屏幕上可滚动 */
         }
-        .leave-table th, .leave-table td {
+        .leave-table th,
+        .leave-table td {
             border: 1px solid #cfdfed;
             padding: 10px 8px;
+            vertical-align: middle;        /* 垂直居中，避免按钮与其他内容错位 */
             text-align: left;
-            vertical-align: top;
-            background-color: white;
-            min-width: 80px;
+            word-break: break-word;        /* 长单词/链接自动换行 */
+            white-space: normal;
         }
         .leave-table th {
             background: #eef4fa;
             font-weight: 700;
         }
+        /* 操作列里的按钮组保持内联，不破坏行高 */
+        .leave-table td .btn-sm {
+            margin: 2px 4px;
+            white-space: nowrap;
+        }
+        /* 员工列表（列数较多）允许水平滚动，不强制固定宽度 */
+        .employee-list-table {
+            table-layout: auto;
+            min-width: 1400px;
+        }
+        .employee-list-table th,
+        .employee-list-table td {
+            white-space: nowrap;
+        }
+        /* 模态框等其他样式保持不变 */
         .modal {
             position: fixed;
             top: 0;
@@ -352,7 +373,6 @@
         });
     }
 
-    // 剩余年假显示格式化：<0.5舍去，=0.5保留一位，>0.5进位
     function formatRemaining(value) {
         if (value === undefined || value === null) return '0';
         const floorVal = Math.floor(value);
@@ -365,14 +385,10 @@
             return floorVal;
         }
     }
-
-    // 当年应得年假显示：标准四舍五入
     function formatAnnual(value) {
         if (value === undefined || value === null) return '0';
         return Math.round(value);
     }
-
-    // 周末天数计算（支持起止日期）
     function calculateWorkDays(startDateStr, endDateStr) {
         let start = new Date(startDateStr);
         let end = new Date(endDateStr);
@@ -474,7 +490,6 @@
         const used = await getUsedDays(empId, "sick");
         return total - used;
     }
-    // 育儿假相关函数
     async function getRemainingChildcareDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp || !emp.childcareEnabled) return 0;
@@ -518,7 +533,6 @@
     async function saveLeaveRequest(req) { await leaveRequestsCollection.doc(req.id).set(req); }
     async function deleteLeaveRequest(reqId) { await leaveRequestsCollection.doc(reqId).delete(); }
 
-    // 获取已用天数（年假统计所有；病假/无薪假/育儿假只统计当前年份）
     async function getUsedDays(empId, type) {
         const records = await loadLeaveRecords();
         const currentYear = new Date().getFullYear();
@@ -535,8 +549,6 @@
         return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.startDate).getFullYear() === currentYear)
                       .reduce((sum, r) => sum + r.days, 0);
     }
-
-    // 数据迁移：将旧数据中的 date 字段转为 startDate/endDate
     async function migrateOldLeaveRecords() {
         const records = await loadLeaveRecords();
         let needUpdate = false;
@@ -550,7 +562,7 @@
         }
         if (needUpdate) console.log("旧数据迁移完成，已将 date 字段同步到 startDate 和 endDate");
     }
-    // 渲染员工卡片（增加育儿假显示）
+    
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
@@ -575,12 +587,7 @@
             else typeLabel = r.type;
             const attachHtml = r.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${r.id}')">📎 附件</a>` : '';
             const dateRange = (r.startDate === r.endDate) ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
-            return `<tr>
-                <td>${dateRange}</td>
-                <td>${typeLabel}</td>
-                <td>${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td>
-                <td>${attachHtml}</td>
-            </tr>`;
+            return `<tr><td style="width:35%">${dateRange}</td><td style="width:25%">${typeLabel}</td><td style="width:20%">${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td><td style="width:20%">${attachHtml}</td></tr>`;
         }).join('');
         const requests = (await loadLeaveRequests()).filter(r => r.empId === emp.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
         const requestRows = requests.map(req => {
@@ -596,15 +603,15 @@
             const approvedAtText = req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
             return `<tr>
-                <td>${new Date(req.createdAt).toLocaleDateString()}</td>
-                <td>${escapeHtml(typeDisplay)}</td>
-                <td>${req.startDate} ~ ${req.endDate}</td>
-                <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
-                <td>${escapeHtml(req.reason)}</td>
-                <td>${statusText}</td>
-                <td>${approvedByText}</td>
-                <td>${approvedAtText}</td>
-                <td>${attachLink}</td>
+                <td style="width:12%">${new Date(req.createdAt).toLocaleDateString()}</td>
+                <td style="width:10%">${escapeHtml(typeDisplay)}</td>
+                <td style="width:14%">${req.startDate} ~ ${req.endDate}</td>
+                <td style="width:6%">${req.days}${req.days % 1 === 0 ? '' : ''}</td>
+                <td style="width:18%">${escapeHtml(req.reason)}</td>
+                <td style="width:10%">${statusText}</td>
+                <td style="width:10%">${approvedByText}</td>
+                <td style="width:12%">${approvedAtText}</td>
+                <td style="width:8%">${attachLink}</td>
             </tr>`;
         }).join('');
         const html = `
@@ -641,38 +648,15 @@
                 <h3>📋 我的休假记录 / My Leave Records</h3>
                 <div class="table-wrapper">
                     <table class="leave-table">
-                        <thead>
-                            <tr>
-                                <th>日期范围 / Date Range</th>
-                                <th>类型 / Type</th>
-                                <th>天数 / Days</th>
-                                <th>附件 / Attachment</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${recordRows || '<tr><td colspan="4">暂无记录</td>'}
-                        </tbody>
+                        <thead><tr><th style="width:35%">日期范围 / Date Range</th><th style="width:25%">类型 / Type</th><th style="width:20%">天数 / Days</th><th style="width:20%">附件 / Attachment</th></tr></thead>
+                        <tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody>
                     </table>
                 </div>
                 <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
                 <div class="table-wrapper">
                     <table class="leave-table">
-                        <thead>
-                            <tr>
-                                <th>申请日期</th>
-                                <th>类型</th>
-                                <th>日期范围</th>
-                                <th>天数</th>
-                                <th>理由</th>
-                                <th>状态</th>
-                                <th>审批人</th>
-                                <th>审批时间</th>
-                                <th>附件</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${requestRows || '<tr><td colspan="9">暂无申请</td>'}
-                        </tbody>
+                        <thead><tr><th style="width:12%">申请日期</th><th style="width:10%">类型</th><th style="width:14%">日期范围</th><th style="width:6%">天数</th><th style="width:18%">理由</th><th style="width:10%">状态</th><th style="width:10%">审批人</th><th style="width:12%">审批时间</th><th style="width:8%">附件</th></tr></thead>
+                        <tbody>${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}</tbody>
                     </table>
                 </div>
                 <div class="weekday-note">* 请假天数计算规则：周日全天不计，周六只算0.5天，周一至周五各算1天。</div>
@@ -682,7 +666,6 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(emp));
     }
 
-    // 打开申请模态框（增加育儿假选项）
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         const today = new Date().toISOString().slice(0,10);
@@ -796,7 +779,7 @@
         win.document.close();
     }
 
-    // 审批相关函数
+    // 审批相关函数 (修复了表头宽度，保证对齐)
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -857,13 +840,22 @@
         }
         alert("已删除");
     }
+    
     async function renderPendingRequests(containerId) {
         const requests = await loadLeaveRequests();
         const pending = requests.filter(r => r.status === "pending");
         const container = document.getElementById(containerId);
         if (!container) return;
         if (pending.length === 0) { container.innerHTML = "<p>暂无待审批申请</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>
+            <th style="width:15%">员工 / Employee</th>
+            <th style="width:12%">类型 / Type</th>
+            <th style="width:20%">日期范围 / Date Range</th>
+            <th style="width:8%">天数 / Days</th>
+            <th style="width:20%">理由 / Reason</th>
+            <th style="width:10%">附件 / Attachment</th>
+            <th style="width:15%">操作 / Actions</th>
+        </tr></thead><tbody>`;
         for (let req of pending) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -883,7 +875,7 @@
                 <td><button class="btn btn-success btn-sm" onclick="window.approveRequestWrapper('${req.id}')">批准</button> <button class="btn btn-danger btn-sm" onclick="window.rejectRequestWrapper('${req.id}')">拒绝</button></td>
             </tr>`;
         }
-        html += `</tbody><table></div>`;
+        html += `</tbody></table></div>`;
         container.innerHTML = html;
         window.approveRequestWrapper = async (rid) => {
             let approver = null;
@@ -906,13 +898,25 @@
             if (approver) await rejectRequest(rid, approver);
         };
     }
+    
+    // ⭐ 关键修复：审批历史表格，明确每一列的宽度，解决“格子对不上”问题
     async function renderApprovalHistory(containerId) {
         const requests = await loadLeaveRequests();
         const approved = requests.filter(r => r.status !== "pending").sort((a,b)=>new Date(b.approvedAt)-new Date(a.approvedAt));
         const container = document.getElementById(containerId);
         if (!container) return;
         if (approved.length === 0) { container.innerHTML = "<p>暂无审批记录</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></td></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr>
+            <th style="width:12%">员工 / Employee</th>
+            <th style="width:10%">类型 / Type</th>
+            <th style="width:12%">日期范围 / Date Range</th>
+            <th style="width:6%">天数 / Days</th>
+            <th style="width:8%">结果 / Result</th>
+            <th style="width:10%">审批人 / Approver</th>
+            <th style="width:16%">审批时间 / Approved At</th>
+            <th style="width:8%">附件 / Attachment</th>
+            <th style="width:8%">操作 / Actions</th>
+        </tr></thead><tbody>`;
         for (let req of approved) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -921,18 +925,19 @@
             if (req.type === 'other' && req.customLeaveType) typeDisplay = req.customLeaveType;
             else if (req.type === 'urgent') typeDisplay = '紧急休假 / Urgent Leave';
             else if (req.type === 'childcare') typeDisplay = '育儿假 / Childcare';
-            const result = req.status === 'approved' ? '批准' : '拒绝';
+            const result = req.status === 'approved' ? '批准 / Approved' : '拒绝 / Rejected';
             const attachLink = req.attachment ? `<a class="attachment-link" onclick="downloadRequestAttachment('${req.id}')">📎 下载</a>` : '';
-            html += `</table>
+            const approvedAtDisplay = req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-';
+            html += `<tr>
                 <td>${escapeHtml(empName)}</td>
                 <td>${escapeHtml(typeDisplay)}</td>
                 <td>${req.startDate} ~ ${req.endDate}</td>
                 <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
                 <td>${result}</td>
                 <td>${req.approvedByName || '-'}</td>
-                <td>${req.approvedAt ? new Date(req.approvedAt).toLocaleString() : '-'}</td>
+                <td>${approvedAtDisplay}</td>
                 <td>${attachLink}</td>
-                <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除</button></td>
+                <td><button class="btn btn-danger btn-sm" onclick="deleteRequest('${req.id}')">删除 / Delete</button></td>
             </tr>`;
         }
         html += `</tbody></table></div>`;
@@ -940,12 +945,11 @@
         window.deleteRequest = deleteRequest;
     }
     
-    // 管理员表格（增加育儿假列）
     async function renderAdminTable() {
         const emps = await loadEmployees();
         const headers = ["工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date", "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual", "已休年假 / Annual Taken", "剩余年假 / Remaining Annual", "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick", "育儿假总额 / Childcare Total", "已休育儿假 / Childcare Taken", "剩余育儿假 / Remaining Childcare", "本年无薪假 / Unpaid", "审批人", "操作 / Actions"];
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead></tr>`;
-        for (let h of headers) html += `<th>${escapeHtml(h)}</th>`;
+        let html = `<div class="table-wrapper"><table class="leave-table employee-list-table"><thead><tr>`;
+        for (let h of headers) html += `<th style="white-space:nowrap;">${escapeHtml(h)}</th>`;
         html += `</thead><tbody>`;
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
@@ -974,7 +978,7 @@
             ];
             html += `<tr>`;
             for (let i = 0; i < cells.length; i++) {
-                if (i === cells.length - 1) html += `<td>${cells[i]}</td>`;
+                if (i === cells.length - 1) html += `<td style="white-space:nowrap;">${cells[i]}</td>`;
                 else html += `<td>${typeof cells[i] === 'number' ? cells[i] : escapeHtml(cells[i])}</td>`;
             }
             html += `</tr>`;
@@ -1007,7 +1011,6 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理休假记录（支持育儿假）
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
@@ -1024,19 +1027,10 @@
                 else typeLabel = rec.type;
                 const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
                 const dateRange = (rec.startDate === rec.endDate) ? rec.startDate : `${rec.startDate} ~ ${rec.endDate}`;
-                return `<tr>
-                    <td>${dateRange}</td>
-                    <td>${typeLabel}</td>
-                    <td>${rec.days}${rec.days % 1 === 0 ? '' : ''}</td>
-                    <td>${attachHtml}</td>
-                    <td style="white-space: nowrap;">
-                        <button class="btn btn-primary btn-sm" onclick="openEditRecordModal('${rec.id}')">✏️ 编辑</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button>
-                    </td>
-                <tr>`;
+                return `<tr><td style="width:30%">${dateRange}</td><td style="width:20%">${typeLabel}</td><td style="width:15%">${rec.days}${rec.days % 1 === 0 ? '' : ''}</td><td style="width:20%">${attachHtml}</td><td style="width:15%"><button class="btn btn-primary btn-sm" onclick="openEditRecordModal('${rec.id}')">✏️ 编辑</button> <button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td></tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期范围</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td>'}</tbody></table></div>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th style="width:30%">日期范围</th><th style="width:20%">类型</th><th style="width:15%">天数</th><th style="width:20%">附件</th><th style="width:15%">操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table></div>
                 <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap: wrap;">
                     <input type="date" id="newStartDate" placeholder="开始日期" style="flex:1; min-width: 120px;">
                     <input type="date" id="newEndDate" placeholder="结束日期" style="flex:1; min-width: 120px;">
@@ -1152,7 +1146,6 @@
         window.openEditRecordModal = openEditRecordModal;
     };
 
-    // 编辑员工（增加育儿假设置）
     window.openEmployeeEdit = async function(empId) {
         const emps = await loadEmployees();
         const emp = emps.find(e => e.id === empId);
@@ -1246,7 +1239,6 @@
         };
     }
 
-    // 导出汇总数据（原有功能）
     async function exportToExcel() {
         const emps = await loadEmployees();
         const curYear = new Date().getFullYear();
@@ -1273,7 +1265,6 @@
         XLSX.writeFile(wb, `Employee_Leave_Data_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
     }
 
-    // 新增：导出员工假期详细记录
     async function exportLeaveDetails() {
         const emps = await loadEmployees();
         const records = await loadLeaveRecords();
@@ -1303,7 +1294,6 @@
         XLSX.writeFile(wb, `Leave_Details_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.xlsx`);
     }
 
-    // 同步员工数据（保留完整员工列表，包含育儿假字段）
     async function syncFullEmployeeData() {
         if (!confirm("此操作将重置所有员工、休假记录和申请，确定要继续吗？")) return;
         const fullList = [
@@ -1351,7 +1341,6 @@
         } else window.location.reload();
     }
 
-    // 视图切换
     let currentUser = null;
     async function showEmployeeView(emp) {
         document.getElementById('loginView').classList.add('hidden');
@@ -1447,7 +1436,6 @@
         else alert("无附件");
     };
 
-    // 初始化：迁移旧数据
     (async function init() {
         await migrateOldLeaveRecords();
         const emps = await loadEmployees();
