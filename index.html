@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>BeeBox 假期管理系统 · 最终稳定版</title>
+    <title>BeeBox 假期管理系统 · 完整版</title>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
@@ -20,7 +20,7 @@
             padding: 20px;
         }
         .container {
-            max-width: 1400px;
+            max-width: 1600px;
             margin: 0 auto;
         }
         .card {
@@ -182,7 +182,7 @@
         .leave-table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;
+            min-width: 1200px;
         }
         .leave-table th, .leave-table td {
             border: 1px solid #cfdfed;
@@ -190,14 +190,11 @@
             text-align: left;
             vertical-align: top;
             background-color: white;
+            min-width: 80px;
         }
         .leave-table th {
             background: #eef4fa;
             font-weight: 700;
-        }
-        /* 确保表格行不重叠 */
-        .leave-table tr {
-            display: table-row;
         }
         .modal {
             position: fixed;
@@ -354,31 +351,43 @@
         });
     }
 
+    // 剩余年假显示格式化：<0.5舍去，=0.5保留一位，>0.5进位
     function formatRemaining(value) {
         if (value === undefined || value === null) return '0';
         const floorVal = Math.floor(value);
         const decimal = value - floorVal;
-        if (Math.abs(decimal - 0.5) < 1e-9) return value.toFixed(1);
-        else if (decimal > 0.5) return Math.ceil(value);
-        else return floorVal;
+        if (Math.abs(decimal - 0.5) < 1e-9) {
+            return value.toFixed(1);
+        } else if (decimal > 0.5) {
+            return Math.ceil(value);
+        } else {
+            return floorVal;
+        }
     }
+
+    // 当年应得年假显示：标准四舍五入
     function formatAnnual(value) {
         if (value === undefined || value === null) return '0';
         return Math.round(value);
     }
-    function calculateWorkDays(start, end) {
-        let s = new Date(start), e = new Date(end), days = 0, cur = new Date(s);
-        while (cur <= e) {
-            const dow = cur.getDay();
-            if (dow === 0) { /* Sunday */ }
-            else if (dow === 6) days += 0.5;
-            else days += 1;
-            cur.setDate(cur.getDate() + 1);
+
+    // 周末天数计算（支持起止日期）
+    function calculateWorkDays(startDateStr, endDateStr) {
+        let start = new Date(startDateStr);
+        let end = new Date(endDateStr);
+        let days = 0;
+        let current = new Date(start);
+        while (current <= end) {
+            const dayOfWeek = current.getDay();
+            if (dayOfWeek === 0) { /* 周日不计 */ }
+            else if (dayOfWeek === 6) { days += 0.5; }
+            else { days += 1; }
+            current.setDate(current.getDate() + 1);
         }
         return days;
     }
 
-    // 年假自动计算
+    // ==================== 年假自动计算（严格 MOM 规则） ====================
     function getLastDayOfMonth(date = new Date()) {
         return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
     }
@@ -476,26 +485,64 @@
         await employeesCollection.doc(empId).delete();
     }
     async function loadLeaveRecords() { const snap = await leaveRecordsCollection.get(); return snap.docs.map(d => d.data()); }
-    async function addLeaveRecord(empId, type, date, days, attachBase64, attachName) {
-        const record = { id: genId(), empId, type, date, days: parseFloat(days), attachment: attachBase64 || null, attachmentName: attachName, createdAt: new Date().toISOString() };
+    async function addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName) {
+        const record = {
+            id: genId(), empId, type,
+            startDate, endDate, days: parseFloat(days),
+            attachment: attachBase64 || null, attachmentName: attachName,
+            createdAt: new Date().toISOString()
+        };
         await leaveRecordsCollection.doc(record.id).set(record);
         return record.id;
+    }
+    async function updateLeaveRecord(recordId, empId, type, startDate, endDate, days, attachBase64, attachName) {
+        const record = {
+            id: recordId, empId, type,
+            startDate, endDate, days: parseFloat(days),
+            attachment: attachBase64 || null, attachmentName: attachName,
+            updatedAt: new Date().toISOString()
+        };
+        await leaveRecordsCollection.doc(recordId).set(record);
     }
     async function deleteLeaveRecordById(rid) { await leaveRecordsCollection.doc(rid).delete(); }
     async function loadLeaveRequests() { const snap = await leaveRequestsCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveLeaveRequest(req) { await leaveRequestsCollection.doc(req.id).set(req); }
     async function deleteLeaveRequest(reqId) { await leaveRequestsCollection.doc(reqId).delete(); }
+
+    // 获取已用天数（年假统计所有；病假/无薪假只统计当前年份）
     async function getUsedDays(empId, type) {
         const records = await loadLeaveRecords();
-        return records.filter(r => r.empId === empId && r.type === type).reduce((sum, r) => sum + r.days, 0);
+        const currentYear = new Date().getFullYear();
+        return records.filter(r => {
+            if (r.empId !== empId || r.type !== type) return false;
+            if (type === 'annual') return true;
+            const recordYear = new Date(r.startDate).getFullYear();
+            return recordYear === currentYear;
+        }).reduce((sum, r) => sum + r.days, 0);
     }
     async function getCurrentYearUnpaidDays(empId) {
-        const curYear = new Date().getFullYear();
         const records = await loadLeaveRecords();
-        return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.date).getFullYear() === curYear).reduce((sum, r) => sum + r.days, 0);
+        const currentYear = new Date().getFullYear();
+        return records.filter(r => r.empId === empId && r.type === 'unpaid' && new Date(r.startDate).getFullYear() === currentYear)
+                      .reduce((sum, r) => sum + r.days, 0);
     }
 
-    // 渲染员工卡片 - 修复了休假记录表格
+    // 数据迁移：将旧数据中的 date 字段转为 startDate/endDate
+    async function migrateOldLeaveRecords() {
+        const records = await loadLeaveRecords();
+        let needUpdate = false;
+        for (let rec of records) {
+            if (rec.date && !rec.startDate) {
+                rec.startDate = rec.date;
+                rec.endDate = rec.date;
+                await leaveRecordsCollection.doc(rec.id).set(rec);
+                needUpdate = true;
+            }
+        }
+        if (needUpdate) console.log("旧数据迁移完成，已将 date 字段同步到 startDate 和 endDate");
+    }
+
+    // 渲染员工卡片
     async function renderMyLeaveCard(emp, containerId) {
         const container = document.getElementById(containerId);
         const currentYearEntRaw = getCurrentYearEntitlementRaw(emp);
@@ -507,8 +554,7 @@
         const sickUsed = await getUsedDays(emp.id, "sick");
         const remainingSick = sickTotal - sickUsed;
         const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
-        const records = (await loadLeaveRecords()).filter(r => r.empId === emp.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-        // 修复：确保每条记录单独一行
+        const records = (await loadLeaveRecords()).filter(r => r.empId === emp.id).sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
         const recordRows = records.map(r => {
             let typeLabel = '';
             if (r.type === 'annual') typeLabel = '年假 / Annual';
@@ -516,8 +562,9 @@
             else if (r.type === 'unpaid') typeLabel = '无薪假 / Unpaid';
             else typeLabel = r.type;
             const attachHtml = r.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${r.id}')">📎 附件</a>` : '';
+            const dateRange = (r.startDate === r.endDate) ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
             return `<tr>
-                <td>${r.date}</td>
+                <td>${dateRange}</td>
                 <td>${typeLabel}</td>
                 <td>${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td>
                 <td>${attachHtml}</td>
@@ -576,14 +623,14 @@
                     <table class="leave-table">
                         <thead>
                             <tr>
-                                <th>日期 / Date</th>
+                                <th>日期范围 / Date Range</th>
                                 <th>类型 / Type</th>
                                 <th>天数 / Days</th>
                                 <th>附件 / Attachment</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}
+                            ${recordRows || '<tr><td colspan="4">暂无记录</td>'}
                         </tbody>
                     </table>
                 </div>
@@ -604,7 +651,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            ${requestRows || '<tr><td colspan="9">暂无申请</td></tr>'}
+                            ${requestRows || '<tr><td colspan="9">暂无申请</td>'}
                         </tbody>
                     </table>
                 </div>
@@ -654,7 +701,10 @@
         const endDateInput = document.getElementById('reqEndDate');
         const daysInput = document.getElementById('reqDays');
         const updateDays = () => {
-            if (startDateInput.value && endDateInput.value) daysInput.value = calculateWorkDays(startDateInput.value, endDateInput.value);
+            if (startDateInput.value && endDateInput.value) {
+                const days = calculateWorkDays(startDateInput.value, endDateInput.value);
+                daysInput.value = days;
+            }
         };
         startDateInput.addEventListener('change', updateDays);
         endDateInput.addEventListener('change', updateDays);
@@ -726,7 +776,7 @@
         let recordType = req.type;
         if (req.type === 'other' && req.customLeaveType) recordType = req.customLeaveType;
         else if (req.type === 'urgent') recordType = 'urgent';
-        const newRecordId = await addLeaveRecord(req.empId, recordType, req.startDate, req.days, req.attachment, req.attachmentName);
+        const newRecordId = await addLeaveRecord(req.empId, recordType, req.startDate, req.endDate, req.days, req.attachment, req.attachmentName);
         req.status = "approved";
         req.approvedBy = approverEmp.id;
         req.approvedByName = approverEmp.name;
@@ -785,7 +835,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (pending.length === 0) { container.innerHTML = "<p>暂无待审批申请</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead></tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead><tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>理由</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
         for (let req of pending) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -833,7 +883,7 @@
         const container = document.getElementById(containerId);
         if (!container) return;
         if (approved.length === 0) { container.innerHTML = "<p>暂无审批记录</p>"; return; }
-        let html = `<div class="table-wrapper"><table class="leave-table"><thead></tr><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></tr></thead><tbody>`;
+        let html = `<div class="table-wrapper"><table class="leave-table"><thead></td><th>员工</th><th>类型</th><th>日期范围</th><th>天数</th><th>结果</th><th>审批人</th><th>审批时间</th><th>附件</th><th>操作</th></td></thead><tbody>`;
         for (let req of approved) {
             const emps = await loadEmployees();
             const emp = emps.find(e => e.id === req.empId);
@@ -900,7 +950,6 @@
         document.getElementById("refreshAdminTable")?.addEventListener("click", () => { renderAdminTable(); renderPendingAndHistory(); });
     }
 
-    // 删除包装
     window.deleteEmployeeFirestoreWrapper = async function(empId) {
         if (confirm(`删除员工 ${empId} 及其所有休假记录和申请？`)) {
             try {
@@ -924,12 +973,15 @@
         await renderApprovalHistory('approverHistoryContainer');
     }
 
-    // 管理休假记录
+    // 管理休假记录（支持编辑）—— 已调整类型下拉框宽度
     window.manageRecords = async function(empId) {
         const emp = (await loadEmployees()).find(e=>e.id===empId);
         if(!emp) return;
         let records = (await loadLeaveRecords()).filter(r=>r.empId===empId);
+        let currentEditingId = null;
+
         const modal = document.createElement('div'); modal.className='modal';
+        
         const renderRecords = () => {
             const recHtml = records.map(rec => {
                 let typeLabel = '';
@@ -938,53 +990,134 @@
                 else if (rec.type === 'unpaid') typeLabel = '无薪假';
                 else typeLabel = rec.type;
                 const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
+                const dateRange = (rec.startDate === rec.endDate) ? rec.startDate : `${rec.startDate} ~ ${rec.endDate}`;
                 return `<tr>
-                    <td>${rec.date}</td>
+                    <td>${dateRange}</td>
                     <td>${typeLabel}</td>
                     <td>${rec.days}${rec.days % 1 === 0 ? '' : ''}</td>
                     <td>${attachHtml}</td>
-                    <td><button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td>
+                    <td style="white-space: nowrap;">
+                        <button class="btn btn-primary btn-sm" onclick="openEditRecordModal('${rec.id}')">✏️ 编辑</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button>
+                    </td>
                 </tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td>'}</tbody></table></div>
-                <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <input type="date" id="newDate" style="flex:1;"><select id="newType" style="flex:1;"><option value="annual">年假</option><option value="sick">病假</option><option value="unpaid">无薪假</option><option value="other">其他</option></select>
-                    <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1;">
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th>日期范围</th><th>类型</th><th>天数</th><th>附件</th><th>操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td>'}</tbody></table></div>
+                <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap: wrap;">
+                    <input type="date" id="newStartDate" placeholder="开始日期" style="flex:1; min-width: 120px;">
+                    <input type="date" id="newEndDate" placeholder="结束日期" style="flex:1; min-width: 120px;">
+                    <select id="newType" style="flex:2; min-width: 140px;">
+                        <option value="annual">年假</option>
+                        <option value="sick">病假</option>
+                        <option value="unpaid">无薪假</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1; min-width: 100px;">
                     <button type="button" class="btn btn-sm" id="autoCalcDaysBtn" style="background:#f0f0f0;">📅 自动计算(周末规则)</button>
                     <input type="file" id="newAttachment" style="flex:2;">
                     <button class="btn btn-primary btn-sm" id="addRecordBtn">➕ 添加</button>
                 </div></div>
                 <div style="margin-top:16px; text-align:right;"><button class="btn btn-secondary" id="closeRecordModal">关闭</button></div>`;
         };
+
+        const openEditRecordModal = async (recId) => {
+            const rec = records.find(r => r.id === recId);
+            if (!rec) return;
+            currentEditingId = recId;
+            const editModal = document.createElement('div'); editModal.className='modal';
+            editModal.innerHTML = `
+                <div class="modal-content">
+                    <h3>编辑休假记录</h3>
+                    <div class="form-group"><label>开始日期 / Start Date</label><input type="date" id="editStartDate" value="${rec.startDate}"></div>
+                    <div class="form-group"><label>结束日期 / End Date</label><input type="date" id="editEndDate" value="${rec.endDate}"></div>
+                    <div class="form-group"><label>类型 / Type</label>
+                        <select id="editType">
+                            <option value="annual" ${rec.type==='annual'?'selected':''}>年假</option>
+                            <option value="sick" ${rec.type==='sick'?'selected':''}>病假</option>
+                            <option value="unpaid" ${rec.type==='unpaid'?'selected':''}>无薪假</option>
+                            <option value="other" ${rec.type==='other'?'selected':''}>其他</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>天数 / Days</label><input type="number" id="editDays" step="0.5" value="${rec.days}"></div>
+                    <div class="form-group"><label>附件 / Attachment</label><input type="file" id="editAttachment"></div>
+                    <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
+                        <button class="btn btn-secondary" id="closeEditModal">取消</button>
+                        <button class="btn btn-primary" id="saveEditBtn">保存</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(editModal);
+            document.getElementById('closeEditModal').onclick = () => editModal.remove();
+            document.getElementById('saveEditBtn').onclick = async () => {
+                const newStartDate = document.getElementById('editStartDate').value;
+                const newEndDate = document.getElementById('editEndDate').value;
+                const newType = document.getElementById('editType').value;
+                let newDays = parseFloat(document.getElementById('editDays').value);
+                const fileInput = document.getElementById('editAttachment');
+                let attachBase64 = null, attachName = null;
+                if (fileInput.files.length > 0) {
+                    const f = fileInput.files[0];
+                    attachName = f.name;
+                    attachBase64 = await readFileAsBase64(f);
+                }
+                if (!newStartDate || !newEndDate || isNaN(newDays) || newDays <= 0) {
+                    alert("请填写完整有效的日期和天数");
+                    return;
+                }
+                if (!attachBase64 && rec.attachment) {
+                    attachBase64 = rec.attachment;
+                    attachName = rec.attachmentName;
+                }
+                await updateLeaveRecord(rec.id, empId, newType, newStartDate, newEndDate, newDays, attachBase64, attachName);
+                editModal.remove();
+                await refreshModal();
+            };
+        };
+
         const refreshModal = async () => {
             records = (await loadLeaveRecords()).filter(r=>r.empId===empId);
             document.getElementById('recordInner').innerHTML = renderRecords();
             attachEvents();
+            window.openEditRecordModal = openEditRecordModal;
         };
+
         const attachEvents = () => {
-            const dateInput = document.getElementById('newDate');
+            const startDateInput = document.getElementById('newStartDate');
+            const endDateInput = document.getElementById('newEndDate');
             const daysInput = document.getElementById('newDays');
             const autoCalcBtn = document.getElementById('autoCalcDaysBtn');
-            if (autoCalcBtn) autoCalcBtn.onclick = () => { if (dateInput.value) daysInput.value = calculateWorkDays(dateInput.value, dateInput.value); else alert("请先选择日期"); };
+            if (autoCalcBtn) autoCalcBtn.onclick = () => {
+                if (startDateInput.value && endDateInput.value) {
+                    daysInput.value = calculateWorkDays(startDateInput.value, endDateInput.value);
+                } else alert("请先选择开始日期和结束日期");
+            };
             document.getElementById('addRecordBtn')?.addEventListener('click', async () => {
-                const date = dateInput.value, type = document.getElementById('newType').value, days = parseFloat(daysInput.value);
+                const startDate = startDateInput.value, endDate = endDateInput.value;
+                const type = document.getElementById('newType').value;
+                let days = parseFloat(daysInput.value);
                 const fileInput = document.getElementById('newAttachment');
                 let attachBase64 = null, attachName = null;
                 if (fileInput.files.length > 0) { const f = fileInput.files[0]; attachName = f.name; attachBase64 = await readFileAsBase64(f); }
-                if(!date || isNaN(days) || days<=0){ alert("请填写完整日期和正数天数"); return; }
-                await addLeaveRecord(empId, type, date, days, attachBase64, attachName);
+                if(!startDate || !endDate || isNaN(days) || days<=0){ alert("请填写完整日期和正数天数"); return; }
+                await addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName);
                 await refreshModal();
             });
-            window.deleteRecord = async (recId) => { await deleteLeaveRecordById(recId); await refreshModal(); };
+            window.deleteRecord = async (recId) => {
+                if (confirm("确定删除此条记录吗？")) {
+                    await deleteLeaveRecordById(recId);
+                    await refreshModal();
+                }
+            };
             document.getElementById('closeRecordModal')?.addEventListener('click',()=>modal.remove());
         };
+
         modal.innerHTML = `<div class="modal-content" id="recordInner">${renderRecords()}</div>`;
         document.body.appendChild(modal);
         attachEvents();
+        window.openEditRecordModal = openEditRecordModal;
     };
 
-    // 编辑员工
     window.openEmployeeEdit = async function(empId) {
         const emps = await loadEmployees();
         const emp = emps.find(e => e.id === empId);
@@ -1072,7 +1205,7 @@
             const sickUsed = await getUsedDays(emp.id, 'sick');
             const sickRem = sickTotal - sickUsed;
             const unpaid = await getCurrentYearUnpaidDays(emp.id);
-            exportData.push([emp.id, emp.name, emp.department, emp.startDate, curEnt, carry, total, used, rem, sickTotal, sickUsed, sickRem, unpaid]);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, curEnt.toFixed(1), carry, total.toFixed(1), used, rem.toFixed(1), sickTotal, sickUsed, sickRem, unpaid]);
         }
         const ws = XLSX.utils.aoa_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
@@ -1113,11 +1246,11 @@
         for (const doc of allReqs.docs) await doc.ref.delete();
         for (let emp of fullList) await saveEmployee(emp);
         const sampleRecords = [
-            { id: genId(), empId: "182M", type: "annual", date: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "182M", type: "annual", date: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", date: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "sick", date: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
+            { id: genId(), empId: "182M", type: "annual", startDate: "2025-03-10", endDate: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "182M", type: "annual", startDate: "2025-07-20", endDate: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-04-01", endDate: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-09-15", endDate: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "sick", startDate: "2025-11-05", endDate: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
         ];
         for (let rec of sampleRecords) await leaveRecordsCollection.doc(rec.id).set(rec);
         alert("数据同步完成！");
@@ -1223,7 +1356,9 @@
         else alert("无附件");
     };
 
-    (async function autoCheckAndSync() {
+    // 初始化：迁移旧数据
+    (async function init() {
+        await migrateOldLeaveRecords();
         const emps = await loadEmployees();
         if (emps.length < 20) {
             console.log("检测到员工数据不足，自动同步完整数据...");
