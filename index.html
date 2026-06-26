@@ -40,6 +40,16 @@
             flex-wrap: wrap;
             gap: 12px;
         }
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .header-left .logo-img {
+            height: 44px;
+            width: auto;
+            flex-shrink: 0;
+        }
         .header-left h1 {
             font-size: 1.5rem;
             font-weight: 600;
@@ -68,10 +78,22 @@
             border: 1px solid rgba(255,255,255,0.3);
             white-space: nowrap;
         }
-        .company-logo::before {
-            content: "📦";
-            font-size: 1.1rem;
-        }
+        /* ===== 水印背景（替换为您指定的 Banner 图片） ===== */
+        body::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-image: url('https://www.beebox.com.sg/img/banner-about.jpg');
+    background-size: cover;          /* 全面覆盖，不留空白 */
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.20;
+    z-index: -1;
+    pointer-events: none;
+}
         .current-date {
             background: rgba(255,255,255,0.1);
             padding: 6px 14px;
@@ -182,32 +204,29 @@
             border-radius: 16px;
             background: white;
         }
-        /* ========= 修复所有表格格子对不齐的核心样式 ========= */
         .leave-table {
-            table-layout: fixed;           /* 固定布局，列宽由表头或首行决定 */
+            table-layout: fixed;
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;              /* 保证在小屏幕上可滚动 */
+            min-width: 600px;
         }
         .leave-table th,
         .leave-table td {
             border: 1px solid #cfdfed;
             padding: 10px 8px;
-            vertical-align: middle;        /* 垂直居中，避免按钮与其他内容错位 */
+            vertical-align: middle;
             text-align: left;
-            word-break: break-word;        /* 长单词/链接自动换行 */
+            word-break: break-word;
             white-space: normal;
         }
         .leave-table th {
             background: #eef4fa;
             font-weight: 700;
         }
-        /* 操作列里的按钮组保持内联，不破坏行高 */
         .leave-table td .btn-sm {
             margin: 2px 4px;
             white-space: nowrap;
         }
-        /* 员工列表（列数较多）允许水平滚动，不强制固定宽度 */
         .employee-list-table {
             table-layout: auto;
             min-width: 1400px;
@@ -216,7 +235,6 @@
         .employee-list-table td {
             white-space: nowrap;
         }
-        /* 模态框等其他样式保持不变 */
         .modal {
             position: fixed;
             top: 0;
@@ -284,6 +302,7 @@
             .card-header { flex-direction: column; align-items: flex-start; }
             .header-right { align-self: flex-end; }
             .stats-grid { flex-direction: column; }
+            .header-left .logo-img { height: 34px; }
         }
         @media print {
             body * { visibility: hidden; }
@@ -296,9 +315,22 @@
 <div class="container" id="app">
     <!-- 登录视图 -->
     <div id="loginView" class="card">
-        <div class="card-header"><div class="header-left"><h1>🏝️ 假期管理系统 · Leave Management</h1><p>IC/FIN No + 密码登录 | 数据云端同步 | 周六半天·周日不计 Saturday half-day, Sunday not counted</p></div>
-        <div class="header-right"><div class="current-date" id="loginCurrentDate"></div><div class="company-logo">BeeBox Express Pte Ltd</div></div></div>
-        <div class="card-body"><div id="loginError" class="error-msg hidden"></div>
+        <div class="card-header">
+            <div class="header-left">
+                <!-- 新增 Logo 图片 -->
+                <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
+                <div>
+                    <h1>🏝️ 假期管理系统 · Leave Management</h1>
+                    <p>IC/FIN No + 密码登录 | 数据云端同步 | 周六半天·周日不计 Saturday half-day, Sunday not counted</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="current-date" id="loginCurrentDate"></div>
+                <div class="company-logo">BeeBox Express Pte Ltd</div>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="loginError" class="error-msg hidden"></div>
             <div class="form-group"><label>👤 Employee IC/FIN No</label><input type="text" id="empIdInput" autocomplete="off"></div>
             <div class="form-group"><label>🔒 密码 / Password</label><input type="password" id="pwdInput"></div>
             <button class="btn btn-primary" id="doLoginBtn">登录 / Login</button>
@@ -307,22 +339,58 @@
 
     <!-- 员工视图 -->
     <div id="employeeView" class="card hidden">
-        <div class="card-header"><div class="header-left"><h1>🏝️ 我的假期 · My Leave</h1><p>年假 & 病假 & 无薪假 & 育儿假明细记录 | 可提交申请</p></div>
-        <div class="header-right"><div class="current-date" id="empCurrentDate"></div><div class="company-logo">BeeBox Express Pte Ltd</div><button class="btn btn-secondary btn-sm" id="empLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-header">
+            <div class="header-left">
+                <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
+                <div>
+                    <h1>🏝️ 我的假期 · My Leave</h1>
+                    <p>年假 & 病假 & 无薪假 & 育儿假明细记录 | 可提交申请</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="current-date" id="empCurrentDate"></div>
+                <div class="company-logo">BeeBox Express Pte Ltd</div>
+                <button class="btn btn-secondary btn-sm" id="empLogoutBtn">退出 / Logout</button>
+            </div>
+        </div>
         <div class="card-body" id="employeeContent"></div>
     </div>
 
     <!-- 审批人视图 -->
     <div id="approverView" class="card hidden">
-        <div class="card-header"><div class="header-left"><h1>👥 审批面板 · Approver Panel</h1><p>待审批申请 & 审批历史 | 我的假期</p></div>
-        <div class="header-right"><div class="current-date" id="approverCurrentDate"></div><div class="company-logo">BeeBox Express Pte Ltd</div><button class="btn btn-secondary btn-sm" id="approverLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-header">
+            <div class="header-left">
+                <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
+                <div>
+                    <h1>👥 审批面板 · Approver Panel</h1>
+                    <p>待审批申请 & 审批历史 | 我的假期</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="current-date" id="approverCurrentDate"></div>
+                <div class="company-logo">BeeBox Express Pte Ltd</div>
+                <button class="btn btn-secondary btn-sm" id="approverLogoutBtn">退出 / Logout</button>
+            </div>
+        </div>
         <div class="card-body" id="approverContent"></div>
     </div>
 
     <!-- 管理员视图 -->
     <div id="adminView" class="card hidden">
-        <div class="card-header"><div class="header-left"><h1>👑 管理员面板 · Admin Panel</h1><p>管理员工、休假记录、审批申请、附件</p></div>
-        <div class="header-right"><div class="current-date" id="adminCurrentDate"></div><div class="company-logo">BeeBox Express Pte Ltd</div><button class="btn btn-secondary btn-sm" id="adminLogoutBtn">退出 / Logout</button></div></div>
+        <div class="card-header">
+            <div class="header-left">
+                <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
+                <div>
+                    <h1>👑 管理员面板 · Admin Panel</h1>
+                    <p>管理员工、休假记录、审批申请、附件</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="current-date" id="adminCurrentDate"></div>
+                <div class="company-logo">BeeBox Express Pte Ltd</div>
+                <button class="btn btn-secondary btn-sm" id="adminLogoutBtn">退出 / Logout</button>
+            </div>
+        </div>
         <div class="card-body">
             <div style="display: flex; justify-content: space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
                 <h3>员工列表 · Employee List</h3>
@@ -339,6 +407,7 @@
         </div>
     </div>
 </div>
+
 <script>
     // ==================== Firebase 配置 ====================
     const firebaseConfig = {
@@ -692,7 +761,7 @@
                 <div class="form-group"><label>理由 / Reason</label><textarea id="reqReason" rows="3"></textarea></div>
                 <div class="form-group"><label>附件 / Attachment</label><input type="file" id="reqFile"></div>
                 <div class="notice-advance"><strong>NOTED:</strong> PLEASE SUBMIT THE LEAVE FORM IN ADVANCE FOR AT LEAST THREE (3) WORKING DAYS.<br><strong>请注意：</strong>请至少提前三 (3) 个工作日提交请假单。</div>
-                <div style="display:flex; justify-content:space-between; margin-top:10px;"><button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button><div><button class="btn btn-secondary" id="closeReqModal">取消 / Cancel</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left:10px;">提交申请 / Submit Request</button></div></div>
+                <div style="display:flex; justify-content:space-between; margin-top:10px;"><button type="button" class="btn download-form-btn" id="downloadFormBtn">📄 下载/打印 BEEBOX LEAVE FORM</button><div><button class="btn btn-secondary" id="closeReqModal">取消</button><button class="btn btn-primary" id="submitReqBtn" style="margin-left:10px;">提交申请</button></div></div>
                 <div class="weekday-note">* 周日全天不计，周六0.5天，周一至周五1天。</div>
             </div>
         `;
@@ -779,7 +848,7 @@
         win.document.close();
     }
 
-    // 审批相关函数 (修复了表头宽度，保证对齐)
+    // 审批相关函数
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -899,7 +968,6 @@
         };
     }
     
-    // ⭐ 关键修复：审批历史表格，明确每一列的宽度，解决“格子对不上”问题
     async function renderApprovalHistory(containerId) {
         const requests = await loadLeaveRequests();
         const approved = requests.filter(r => r.status !== "pending").sort((a,b)=>new Date(b.approvedAt)-new Date(a.approvedAt));
