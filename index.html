@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
+        /* ===== 完整样式（与原版一致，只改动了水印和 Logo） ===== */
         * {
             margin: 0;
             padding: 0;
@@ -78,22 +79,22 @@
             border: 1px solid rgba(255,255,255,0.3);
             white-space: nowrap;
         }
-        /* ===== 水印背景（替换为您指定的 Banner 图片） ===== */
+        /* ===== 水印背景（全面覆盖） ===== */
         body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-image: url('https://www.beebox.com.sg/img/banner-about.jpg');
-    background-size: cover;          /* 全面覆盖，不留空白 */
-    background-repeat: no-repeat;
-    background-position: center;
-    opacity: 0.20;
-    z-index: -1;
-    pointer-events: none;
-}
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('https://www.beebox.com.sg/img/banner-about.jpg');
+            background-size: cover;          /* 全面覆盖，不留空白 */
+            background-repeat: no-repeat;
+            background-position: center;
+            opacity: 0.15;
+            z-index: -1;
+            pointer-events: none;
+        }
         .current-date {
             background: rgba(255,255,255,0.1);
             padding: 6px 14px;
@@ -317,7 +318,6 @@
     <div id="loginView" class="card">
         <div class="card-header">
             <div class="header-left">
-                <!-- 新增 Logo 图片 -->
                 <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
                 <div>
                     <h1>🏝️ 假期管理系统 · Leave Management</h1>
@@ -329,10 +329,16 @@
                 <div class="company-logo">BeeBox Express Pte Ltd</div>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:20px 24px;">
             <div id="loginError" class="error-msg hidden"></div>
-            <div class="form-group"><label>👤 Employee IC/FIN No</label><input type="text" id="empIdInput" autocomplete="off"></div>
-            <div class="form-group"><label>🔒 密码 / Password</label><input type="password" id="pwdInput"></div>
+            <div class="form-group">
+                <label>👤 Employee IC/FIN No</label>
+                <input type="text" id="empIdInput" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <label>🔒 密码 / Password</label>
+                <input type="password" id="pwdInput">
+            </div>
             <button class="btn btn-primary" id="doLoginBtn">登录 / Login</button>
         </div>
     </div>
@@ -391,7 +397,7 @@
                 <button class="btn btn-secondary btn-sm" id="adminLogoutBtn">退出 / Logout</button>
             </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding:20px 24px;">
             <div style="display: flex; justify-content: space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px;">
                 <h3>员工列表 · Employee List</h3>
                 <div style="display: flex; gap: 8px;">
