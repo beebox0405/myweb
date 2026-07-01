@@ -88,7 +88,7 @@
             width: 100%;
             height: 100%;
             background-image: url('https://www.beebox.com.sg/img/banner-about.jpg');
-            background-size: cover;          /* 全面覆盖，不留空白 */
+            background-size: cover;
             background-repeat: no-repeat;
             background-position: center;
             opacity: 0.15;
@@ -230,7 +230,7 @@
         }
         .employee-list-table {
             table-layout: auto;
-            min-width: 1400px;
+            min-width: 1500px;
         }
         .employee-list-table th,
         .employee-list-table td {
@@ -573,6 +573,22 @@
         return total - used;
     }
 
+    // ===== 新增：计算工作周年数（年资） =====
+    function calculateYearsOfService(startDateStr) {
+        if (!startDateStr) return '';
+        const start = new Date(startDateStr);
+        if (isNaN(start.getTime())) return '';
+        const now = new Date();
+        let years = now.getFullYear() - start.getFullYear();
+        // 检查今年是否已过入职月日
+        const monthPassed = now.getMonth() > start.getMonth();
+        const dayPassed = (now.getMonth() === start.getMonth()) && (now.getDate() >= start.getDate());
+        if (!monthPassed && !dayPassed) {
+            years--;
+        }
+        return years;
+    }
+
     // 数据操作
     async function loadEmployees() { const snap = await employeesCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveEmployee(emp) { await employeesCollection.doc(emp.id).set(emp); }
@@ -693,8 +709,8 @@
             <div class="info-panel">
                 <div class="user-greeting"><div class="avatar">${emp.name.charAt(0)}</div>
                 <div><h2>${escapeHtml(emp.name)}</h2><p>${escapeHtml(emp.department)} · 工号 ${emp.id}<br>📅 入职日期: ${emp.startDate}</p></div></div>
+                <!-- 修改：移除“当年应得年假”卡片，只保留“上年结转”和“年假总额” -->
                 <div class="stats-grid">
-                    <div class="stat-card"><div class="stat-label">📆 当年应得年假 / Current Year Entitlement</div><div class="stat-number">${formatAnnual(currentYearEntRaw)} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">📦 上年结转年假 / Carry-over</div><div class="stat-number">${carryOver} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">🏖️ 年假总额 / Total Annual Leave</div><div class="stat-number">${formatAnnual(totalAnnualRaw)} 天 / days</div></div>
                 </div>
@@ -1019,9 +1035,11 @@
         window.deleteRequest = deleteRequest;
     }
     
+    // ===== 管理员表格：使用 calculateYearsOfService 计算年资 =====
     async function renderAdminTable() {
         const emps = await loadEmployees();
-        const headers = ["工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date", "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual", "已休年假 / Annual Taken", "剩余年假 / Remaining Annual", "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick", "育儿假总额 / Childcare Total", "已休育儿假 / Childcare Taken", "剩余育儿假 / Remaining Childcare", "本年无薪假 / Unpaid", "审批人", "操作 / Actions"];
+        // 在“入职日期”后插入“入职年份（年资）”
+        const headers = ["工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date", "入职年份 / Start Year", "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual", "已休年假 / Annual Taken", "剩余年假 / Remaining Annual", "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick", "育儿假总额 / Childcare Total", "已休育儿假 / Childcare Taken", "剩余育儿假 / Remaining Childcare", "本年无薪假 / Unpaid", "审批人", "操作 / Actions"];
         let html = `<div class="table-wrapper"><table class="leave-table employee-list-table"><thead><tr>`;
         for (let h of headers) html += `<th style="white-space:nowrap;">${escapeHtml(h)}</th>`;
         html += `</thead><tbody>`;
@@ -1039,8 +1057,10 @@
             const childcareUsed = emp.childcareEnabled ? await getUsedDays(emp.id, 'childcare') : 0;
             const childcareRemaining = childcareTotal - childcareUsed;
             const unpaidThisYear = await getCurrentYearUnpaidDays(emp.id);
+            // ---- 使用函数计算年资 ----
+            const yearsOfService = calculateYearsOfService(emp.startDate);
             const cells = [
-                emp.id, emp.name, emp.department, emp.startDate,
+                emp.id, emp.name, emp.department, emp.startDate, yearsOfService,
                 formatAnnual(currentYearEntRaw), carryOver, formatAnnual(totalAnnualRaw),
                 annualUsed, formatRemaining(remainingAnnualRaw),
                 sickTotal, sickUsed, remainingSick,
@@ -1313,12 +1333,14 @@
         };
     }
 
+    // ===== 修改导出 Excel：使用 calculateYearsOfService =====
     async function exportToExcel() {
         const emps = await loadEmployees();
         const curYear = new Date().getFullYear();
-        const exportData = [["工号","姓名","部门","入职日期","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假","育儿假总额","已休育儿假","剩余育儿假",`本年无薪假(${curYear})`]];
+        const exportData = [["工号","姓名","部门","入职日期","入职年份","当年应得","上年结转","年假总额","已休年假","剩余年假","病假总额","已休病假","剩余病假","育儿假总额","已休育儿假","剩余育儿假",`本年无薪假(${curYear})`]];
         for (let emp of emps) {
             if (emp.role === 'admin') continue;
+            const yearsOfService = calculateYearsOfService(emp.startDate);
             const curEnt = getCurrentYearEntitlementRaw(emp);
             const carry = emp.carryOverDays || 0;
             const total = curEnt + carry;
@@ -1331,7 +1353,7 @@
             const childcareUsed = emp.childcareEnabled ? await getUsedDays(emp.id, 'childcare') : 0;
             const childcareRem = childcareTotal - childcareUsed;
             const unpaid = await getCurrentYearUnpaidDays(emp.id);
-            exportData.push([emp.id, emp.name, emp.department, emp.startDate, curEnt.toFixed(1), carry, total.toFixed(1), used, rem.toFixed(1), sickTotal, sickUsed, sickRem, childcareTotal, childcareUsed, childcareRem, unpaid]);
+            exportData.push([emp.id, emp.name, emp.department, emp.startDate, yearsOfService, curEnt.toFixed(1), carry, total.toFixed(1), used, rem.toFixed(1), sickTotal, sickUsed, sickRem, childcareTotal, childcareUsed, childcareRem, unpaid]);
         }
         const ws = XLSX.utils.aoa_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
