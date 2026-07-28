@@ -448,22 +448,22 @@
         });
     }
 
+    // ===== 修正：显示值向下取整到最近的 0.5（用于年假总额、当年应得、剩余年假等） =====
+    function formatFloorToHalf(value) {
+        if (value === undefined || value === null) return '0';
+        let floored = Math.floor(value * 2) / 2;
+        return floored % 1 === 0 ? floored.toString() : floored.toFixed(1);
+    }
+
+    // 将原有的 formatRemaining 和 formatAnnual 统一指向同一个函数
     function formatRemaining(value) {
-        if (value === undefined || value === null) return '0';
-        const floorVal = Math.floor(value);
-        const decimal = value - floorVal;
-        if (Math.abs(decimal - 0.5) < 1e-9) {
-            return value.toFixed(1);
-        } else if (decimal > 0.5) {
-            return Math.ceil(value);
-        } else {
-            return floorVal;
-        }
+        return formatFloorToHalf(value);
     }
+
     function formatAnnual(value) {
-        if (value === undefined || value === null) return '0';
-        return Math.round(value);
+        return formatFloorToHalf(value);
     }
+
     function calculateWorkDays(startDateStr, endDateStr) {
         let start = new Date(startDateStr);
         let end = new Date(endDateStr);
