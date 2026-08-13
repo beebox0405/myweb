@@ -534,7 +534,7 @@
         return 14;
     }
 
-    // 精确的应得年假（按完整月份比例，保留小数，用于管理员面板显示）
+    // 精确的应得年假（按完整月份比例，保留小数，用于管理员面板显示和总额计算）
     function getCurrentWorkYearEntitlementRaw(emp, ref = new Date()) {
         if (!emp.startDate) return 0;
         const refDate = new Date(ref);
@@ -552,15 +552,9 @@
         return pro;
     }
 
-    // 向下取整的应得年假（用于年假总额和剩余年假计算）
-    function getCurrentWorkYearEntitlementFloor(emp, ref = new Date()) {
-        const raw = getCurrentWorkYearEntitlementRaw(emp, ref);
-        return Math.floor(raw);
-    }
-
-    // 年假总额 = 取整后的当年应得 + 上年结转
+    // 年假总额 = 精确的当年应得 + 上年结转（不再向下取整）
     function getTotalAnnualEntitlementRaw(emp, ref = new Date()) {
-        const currentEnt = getCurrentWorkYearEntitlementFloor(emp, ref);
+        const currentEnt = getCurrentWorkYearEntitlementRaw(emp, ref);
         const carry = emp.carryOverDays || 0;
         return currentEnt + carry;
     }
