@@ -751,7 +751,7 @@
         const html = `
             <div class="info-panel">
                 <div class="user-greeting"><div class="avatar">${updatedEmp.name.charAt(0)}</div>
-                <div><h2>${escapeHtml(updatedEmp.name)}</h2><p>${escapeHtml(updatedEmp.department)} · FIN No. ${updatedEmp.id}<br>📅 入职日期: ${updatedEmp.startDate}</p></div></div>
+                <div><h2>${escapeHtml(updatedEmp.name)}</h2><p>${escapeHtml(updatedEmp.department)} · IC/FIN No. ${updatedEmp.id}<br>📅 入职日期: ${updatedEmp.startDate}</p></div></div>
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-label">✅ 已休年假 / Annual Taken</div><div class="stat-number">${annualUsed} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${formatRemaining(remainingAnnualRaw)} 天 / days</div></div>
