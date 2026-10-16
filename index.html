@@ -447,14 +447,12 @@
     }
 
     // ===== 显示值处理 =====
-    // 剩余年假：向下取整到最近的 0.5
     function formatRemaining(value) {
         if (value === undefined || value === null) return '0';
         let floored = Math.floor(value * 2) / 2;
         return floored % 1 === 0 ? floored.toString() : floored.toFixed(1);
     }
 
-    // 当年应得、年假总额等：保留一位小数（用于管理员面板）
     function formatAnnual(value) {
         if (value === undefined || value === null) return '0';
         return value.toFixed(1);
@@ -490,128 +488,94 @@
         return years;
     }
 
-    // ==================== 核心年假计算（基于入职周年日） ====================
-    function getWorkYearStart(startDateStr, ref = new Date()) {
+    // ==================== 新年假计算（自然年） ====================
+    function getServiceYearByNaturalYear(startDateStr, ref = new Date()) {
         const start = new Date(startDateStr);
         const refDate = new Date(ref);
-        let years = refDate.getFullYear() - start.getFullYear();
-        const monthPassed = refDate.getMonth() > start.getMonth();
-        const dayPassed = (refDate.getMonth() === start.getMonth()) && (refDate.getDate() >= start.getDate());
-        if (!monthPassed && !dayPassed) {
-            years--;
+        const startYear = start.getFullYear();
+        const currentYear = refDate.getFullYear();
+        if (currentYear < startYear) return 0;
+        return currentYear - startYear + 1;
+    }
+
+    function getAnnualEntitlementForYear(emp, year) {
+        if (!emp.startDate) return 0;
+        const start = new Date(emp.startDate);
+        const startYear = start.getFullYear();
+        if (year < startYear) return 0;
+
+        const serviceYear = year - startYear + 1;
+
+        if (serviceYear === 1) {
+            const yearEnd = new Date(year, 11, 31);
+            const startDate = new Date(emp.startDate);
+            if (startDate > yearEnd) return 0;
+            const diffDays = Math.floor((yearEnd - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            const pro = 7 * (diffDays / 365);
+            return Math.floor(pro);
         }
-        const workStart = new Date(start);
-        workStart.setFullYear(start.getFullYear() + years);
-        return workStart;
-    }
 
-    function getWorkYearEnd(startDateStr, ref = new Date()) {
-        const workStart = getWorkYearStart(startDateStr, ref);
-        const end = new Date(workStart);
-        end.setFullYear(end.getFullYear() + 1);
-        return end;
-    }
-
-    function getServiceYearIndex(startDateStr, ref = new Date()) {
-        const start = new Date(startDateStr);
-        const refDate = new Date(ref);
-        let years = 0;
-        let temp = new Date(start);
-        while (temp <= refDate) {
-            let next = new Date(temp);
-            next.setFullYear(temp.getFullYear() + 1);
-            if (next <= refDate) {
-                years++;
-                temp = next;
-            } else break;
-        }
-        return years + 1;
-    }
-
-    function getBaseAnnualLeave(yearIndex) {
-        if (yearIndex <= 0) return 0;
-        if (yearIndex <= 7) return [0,7,8,9,10,11,12,13][yearIndex];
+        if (serviceYear <= 7) return [0,7,8,9,10,11,12,13][serviceYear];
         return 14;
     }
 
-    // 精确的应得年假（按完整月份比例，保留小数，用于管理员面板显示和总额计算）
-    function getCurrentWorkYearEntitlementRaw(emp, ref = new Date()) {
-        if (!emp.startDate) return 0;
-        const refDate = new Date(ref);
-        const workStart = getWorkYearStart(emp.startDate, refDate);
-        const yearIndex = getServiceYearIndex(emp.startDate, refDate);
-        const base = getBaseAnnualLeave(yearIndex);
-        // 计算完整月份数
-        let months = (refDate.getFullYear() - workStart.getFullYear()) * 12 + (refDate.getMonth() - workStart.getMonth());
-        if (refDate.getDate() < workStart.getDate()) {
-            months--;
-        }
-        if (months < 0) months = 0;
-        if (months > 12) months = 12;
-        const pro = (months / 12) * base;
-        return pro;
+    function getCurrentYearEntitlement(emp, ref = new Date()) {
+        const year = ref.getFullYear();
+        return getAnnualEntitlementForYear(emp, year);
     }
 
-    // 年假总额 = 精确的当年应得 + 上年结转（不再向下取整）
-    function getTotalAnnualEntitlementRaw(emp, ref = new Date()) {
-        const currentEnt = getCurrentWorkYearEntitlementRaw(emp, ref);
+    function getTotalAnnualEntitlement(emp, ref = new Date()) {
+        const currentEnt = getCurrentYearEntitlement(emp, ref);
         const carry = emp.carryOverDays || 0;
         return currentEnt + carry;
     }
 
-    // 自动结转逻辑
     async function autoCarryOver(emp) {
         if (!emp.startDate) return;
-        const ref = new Date();
-        const currentWorkYearIndex = getServiceYearIndex(emp.startDate, ref);
-        if (emp.lastCarryOverYear && emp.lastCarryOverYear === currentWorkYearIndex) {
+        const currentYear = new Date().getFullYear();
+        if (emp.lastCarryOverYear && emp.lastCarryOverYear >= currentYear) {
             return;
         }
-        const prevYearIndex = currentWorkYearIndex - 1;
-        if (prevYearIndex < 1) return;
-        const prevBase = getBaseAnnualLeave(prevYearIndex);
-        const workStart = getWorkYearStart(emp.startDate, ref);
-        const prevWorkStart = new Date(workStart);
-        prevWorkStart.setFullYear(prevWorkStart.getFullYear() - 1);
-        const prevWorkEnd = new Date(workStart);
-        const prevUsed = await getUsedDaysInPeriod(emp.id, prevWorkStart, prevWorkEnd);
-        const prevRemaining = prevBase - prevUsed;
+        const prevYear = currentYear - 1;
+        const startYear = new Date(emp.startDate).getFullYear();
+        if (prevYear < startYear) {
+            emp.lastCarryOverYear = currentYear;
+            await saveEmployee(emp);
+            return;
+        }
+
+        const prevEntitlement = getAnnualEntitlementForYear(emp, prevYear);
+        const records = await loadLeaveRecords();
+        const prevUsed = records.filter(r => {
+            if (r.empId !== emp.id || r.type !== 'annual') return false;
+            const recordDate = new Date(r.startDate);
+            return recordDate.getFullYear() === prevYear;
+        }).reduce((sum, r) => sum + r.days, 0);
+
+        const prevRemaining = prevEntitlement - prevUsed;
         if (prevRemaining > 0) {
             emp.carryOverDays = (emp.carryOverDays || 0) + prevRemaining;
-            emp.lastCarryOverYear = currentWorkYearIndex;
-            await saveEmployee(emp);
         }
+        emp.lastCarryOverYear = currentYear;
+        await saveEmployee(emp);
     }
 
-    async function getUsedDaysInPeriod(empId, startDate, endDate) {
-        const records = await loadLeaveRecords();
-        return records.filter(r => {
-            if (r.empId !== empId || r.type !== 'annual') return false;
-            const recordDate = new Date(r.startDate);
-            return recordDate >= startDate && recordDate < endDate;
-        }).reduce((sum, r) => sum + r.days, 0);
-    }
-
-    // ===== 重写 getUsedDays：按工作年统计 =====
     async function getUsedDays(empId, type, ref = new Date()) {
         const records = await loadLeaveRecords();
         const refDate = new Date(ref);
         if (type === 'annual') {
-            const emp = (await loadEmployees()).find(e => e.id === empId);
-            if (!emp || !emp.startDate) return 0;
-            const workStart = getWorkYearStart(emp.startDate, refDate);
-            const workEnd = getWorkYearEnd(emp.startDate, refDate);
+            const year = refDate.getFullYear();
             return records.filter(r => {
                 if (r.empId !== empId || r.type !== 'annual') return false;
                 const recordDate = new Date(r.startDate);
-                return recordDate >= workStart && recordDate < workEnd;
+                return recordDate.getFullYear() === year;
             }).reduce((sum, r) => sum + r.days, 0);
         } else {
-            const currentYear = refDate.getFullYear();
+            const year = refDate.getFullYear();
             return records.filter(r => {
                 if (r.empId !== empId || r.type !== type) return false;
                 const recordYear = new Date(r.startDate).getFullYear();
-                return recordYear === currentYear;
+                return recordYear === year;
             }).reduce((sum, r) => sum + r.days, 0);
         }
     }
@@ -619,7 +583,7 @@
     async function getRemainingAnnualDays(empId) {
         const emp = (await loadEmployees()).find(e => e.id === empId);
         if (!emp) return 0;
-        const total = getTotalAnnualEntitlementRaw(emp);
+        const total = getTotalAnnualEntitlement(emp);
         const used = await getUsedDays(empId, 'annual');
         return total - used;
     }
@@ -701,7 +665,7 @@
         await autoCarryOver(emp);
         const updatedEmp = (await loadEmployees()).find(e => e.id === emp.id);
         if (!updatedEmp) return;
-        const totalAnnualRaw = getTotalAnnualEntitlementRaw(updatedEmp);
+        const totalAnnualRaw = getTotalAnnualEntitlement(updatedEmp);
         const annualUsed = await getUsedDays(updatedEmp.id, 'annual');
         const remainingAnnualRaw = totalAnnualRaw - annualUsed;
         const sickTotal = updatedEmp.sickTotal || 14;
@@ -751,7 +715,7 @@
         const html = `
             <div class="info-panel">
                 <div class="user-greeting"><div class="avatar">${updatedEmp.name.charAt(0)}</div>
-                <div><h2>${escapeHtml(updatedEmp.name)}</h2><p>${escapeHtml(updatedEmp.department)} · IC/FIN No. ${updatedEmp.id}<br>📅 入职日期: ${updatedEmp.startDate}</p></div></div>
+                <div><h2>${escapeHtml(updatedEmp.name)}</h2><p>${escapeHtml(updatedEmp.department)} · 工号 ${updatedEmp.id}<br>📅 入职日期: ${updatedEmp.startDate}</p></div></div>
                 <div class="stats-grid">
                     <div class="stat-card"><div class="stat-label">✅ 已休年假 / Annual Taken</div><div class="stat-number">${annualUsed} 天 / days</div></div>
                     <div class="stat-card"><div class="stat-label">🏝️ 剩余年假 / Remaining Annual</div><div class="stat-number" style="color:#2e8540;">${formatRemaining(remainingAnnualRaw)} 天 / days</div></div>
@@ -795,7 +759,7 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(updatedEmp));
     }
 
-    // ===== 申请模态框（保持不变） =====
+    // ===== 申请模态框 =====
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         const today = new Date().toISOString().slice(0,10);
@@ -909,7 +873,7 @@
         win.document.close();
     }
 
-    // ===== 审批相关函数（保持不变） =====
+    // ===== 审批相关函数 =====
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -1086,9 +1050,9 @@
             await autoCarryOver(emp);
             const updatedEmp = (await loadEmployees()).find(e => e.id === emp.id);
             if (!updatedEmp) continue;
-            const currentEntRaw = getCurrentWorkYearEntitlementRaw(updatedEmp);
+            const currentEntRaw = getCurrentYearEntitlement(updatedEmp);
             const carryOver = updatedEmp.carryOverDays || 0;
-            const totalAnnualRaw = getTotalAnnualEntitlementRaw(updatedEmp);
+            const totalAnnualRaw = getTotalAnnualEntitlement(updatedEmp);
             const annualUsed = await getUsedDays(updatedEmp.id, 'annual');
             const remainingAnnualRaw = totalAnnualRaw - annualUsed;
             const sickTotal = updatedEmp.sickTotal || 14;
@@ -1387,9 +1351,9 @@
             const updatedEmp = (await loadEmployees()).find(e => e.id === emp.id);
             if (!updatedEmp) continue;
             const yearsOfService = calculateYearsOfService(updatedEmp.startDate);
-            const curEntRaw = getCurrentWorkYearEntitlementRaw(updatedEmp);
+            const curEntRaw = getCurrentYearEntitlement(updatedEmp);
             const carry = updatedEmp.carryOverDays || 0;
-            const total = getTotalAnnualEntitlementRaw(updatedEmp);
+            const total = getTotalAnnualEntitlement(updatedEmp);
             const used = await getUsedDays(updatedEmp.id, 'annual');
             const rem = total - used;
             const sickTotal = updatedEmp.sickTotal || 14;
@@ -1453,9 +1417,7 @@
             { id: "G3406526N", name: "Saw Than Htay Zaw", department: "Warehouse Assistant", startDate: "2025-12-08", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "M3603017P", name: "Cui Liang", department: "14 ft driver", startDate: "2026-03-09", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "G8750811R", name: "Preetep P Kumar", department: "Warehouse Assistant", startDate: "2026-03-02", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
-            { id: "EMP_ZUL", name: "MUHAMMAD ZULRAINNY BIN ZABIDEAN", department: "Lorry Attendant", startDate: "2026-03-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "S7163534A", name: "TAN LI JUNK", department: "Customer Service", startDate: "2025-09-01", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
-            { id: "EMP_SITI", name: "Siti Nor Faezah Binte Abdullah", department: "Warehouse Assistant", startDate: "2025-07-16", password: "123456", role: "user", sickTotal: 14, carryOverDays: 1, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "G6979510U", name: "Chen Chin Leong", department: "Warehouse Assistant", startDate: "2025-07-28", password: "123456", role: "user", sickTotal: 14, carryOverDays: 0, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "182M", name: "Gavin Kong Chong Xuan", department: "Logistic Executive", password: "123456", role: "user", startDate: "2020-07-15", sickTotal: 14, carryOverDays: 3.5, isApprover: true, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
             { id: "S1667227J", name: "Asanar Bin Mohd Ali", department: "Driver", password: "123456", role: "user", startDate: "2017-07-31", sickTotal: 14, carryOverDays: 2, isApprover: false, manualAnnual: null, childcareEnabled: false, childcareTotal: 0 },
@@ -1581,7 +1543,7 @@
     (async function init() {
         await migrateOldLeaveRecords();
         const emps = await loadEmployees();
-        if (emps.length < 20) {
+        if (emps.length < 19) {
             console.log("检测到员工数据不足，自动同步完整数据...");
             await syncFullEmployeeData();
         } else await checkSession();
