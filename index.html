@@ -9,7 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js"></script>
     <style>
-        /* ===== 完整样式（与原版一致） ===== */
+        /* ===== 完整样式 ===== */
         * {
             margin: 0;
             padding: 0;
@@ -113,20 +113,12 @@
             transition: 0.2s;
             font-size: 0.85rem;
         }
-        .btn-primary {
-            background: #1d5b8e;
-        }
+        .btn-primary { background: #1d5b8e; }
         .btn-primary:hover { background: #0f466b; }
-        .btn-danger {
-            background: #b13e3e;
-        }
+        .btn-danger { background: #b13e3e; }
         .btn-danger:hover { background: #8e2e2e; }
-        .btn-secondary {
-            background: #6c8eae;
-        }
-        .btn-success {
-            background: #2e7d32;
-        }
+        .btn-secondary { background: #6c8eae; }
+        .btn-success { background: #2e7d32; }
         .btn-success:hover { background: #1b5e20; }
         .btn-sm {
             padding: 4px 12px;
@@ -141,9 +133,7 @@
             border-radius: 40px;
             margin-bottom: 20px;
         }
-        .hidden {
-            display: none;
-        }
+        .hidden { display: none; }
         .info-panel {
             background: #f8fafd;
             border-radius: 32px;
@@ -208,7 +198,7 @@
             table-layout: fixed;
             width: 100%;
             border-collapse: collapse;
-            min-width: 600px;
+            min-width: 700px;
         }
         .leave-table th,
         .leave-table td {
@@ -256,9 +246,7 @@
             max-height: 90vh;
             overflow-y: auto;
         }
-        .form-group {
-            margin-bottom: 16px;
-        }
+        .form-group { margin-bottom: 16px; }
         label {
             font-weight: 600;
             display: block;
@@ -320,7 +308,7 @@
                 <img class="logo-img" src="http://www.beebox.com.sg/img/logo-beebox.png" alt="BeeBox Logo" />
                 <div>
                     <h1>🏝️ 假期管理系统 · Leave Management</h1>
-                    <p>IC/FIN No + 密码登录 | 数据云端同步 | 周六半天·周日不计 Saturday half-day, Sunday not counted</p>
+                    <p>IC/FIN No + 密码登录 | 数据云端同步 | 周六半天·周日不计</p>
                 </div>
             </div>
             <div class="header-right">
@@ -473,7 +461,6 @@
         return days;
     }
 
-    // ===== 计算工作周年数（年资） =====
     function calculateYearsOfService(startDateStr) {
         if (!startDateStr) return '';
         const start = new Date(startDateStr);
@@ -488,16 +475,7 @@
         return years;
     }
 
-    // ==================== 新年假计算（自然年） ====================
-    function getServiceYearByNaturalYear(startDateStr, ref = new Date()) {
-        const start = new Date(startDateStr);
-        const refDate = new Date(ref);
-        const startYear = start.getFullYear();
-        const currentYear = refDate.getFullYear();
-        if (currentYear < startYear) return 0;
-        return currentYear - startYear + 1;
-    }
-
+    // ==================== 年假计算（自然年） ====================
     function getAnnualEntitlementForYear(emp, year) {
         if (!emp.startDate) return 0;
         const start = new Date(emp.startDate);
@@ -604,7 +582,7 @@
         return total - used;
     }
 
-    // 其他数据操作函数
+    // 数据操作函数
     async function loadEmployees() { const snap = await employeesCollection.get(); return snap.docs.map(d => d.data()); }
     async function saveEmployee(emp) { await employeesCollection.doc(emp.id).set(emp); }
     async function deleteEmployeeFirestore(empId) {
@@ -615,21 +593,26 @@
         await employeesCollection.doc(empId).delete();
     }
     async function loadLeaveRecords() { const snap = await leaveRecordsCollection.get(); return snap.docs.map(d => d.data()); }
-    async function addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName) {
+    
+    // ==================== 关键修改：增加 reason 字段 ====================
+    async function addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName, reason) {
         const record = {
             id: genId(), empId, type,
             startDate, endDate, days: parseFloat(days),
             attachment: attachBase64 || null, attachmentName: attachName,
+            reason: reason || '', // 新增保存理由
             createdAt: new Date().toISOString()
         };
         await leaveRecordsCollection.doc(record.id).set(record);
         return record.id;
     }
-    async function updateLeaveRecord(recordId, empId, type, startDate, endDate, days, attachBase64, attachName) {
+    
+    async function updateLeaveRecord(recordId, empId, type, startDate, endDate, days, attachBase64, attachName, reason) {
         const record = {
             id: recordId, empId, type,
             startDate, endDate, days: parseFloat(days),
             attachment: attachBase64 || null, attachmentName: attachName,
+            reason: reason || '', // 新增保存理由
             updatedAt: new Date().toISOString()
         };
         await leaveRecordsCollection.doc(recordId).set(record);
@@ -675,7 +658,10 @@
         const childcareTotal = updatedEmp.childcareEnabled ? (updatedEmp.childcareTotal || 0) : 0;
         const childcareUsed = updatedEmp.childcareEnabled ? await getUsedDays(updatedEmp.id, 'childcare') : 0;
         const childcareRemaining = childcareTotal - childcareUsed;
+        
         const records = (await loadLeaveRecords()).filter(r => r.empId === updatedEmp.id).sort((a,b)=>new Date(b.startDate)-new Date(a.startDate));
+        
+        // ==================== 关键修改：增加“理由”列 ====================
         const recordRows = records.map(r => {
             let typeLabel = '';
             if (r.type === 'annual') typeLabel = '年假 / Annual';
@@ -685,8 +671,15 @@
             else typeLabel = r.type;
             const attachHtml = r.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${r.id}')">📎 附件</a>` : '';
             const dateRange = (r.startDate === r.endDate) ? r.startDate : `${r.startDate} ~ ${r.endDate}`;
-            return `<tr><td style="width:35%">${dateRange}</td><td style="width:25%">${typeLabel}</td><td style="width:20%">${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td><td style="width:20%">${attachHtml}</td></tr>`;
+            return `<tr>
+                <td style="width:25%">${dateRange}</td>
+                <td style="width:15%">${typeLabel}</td>
+                <td style="width:15%">${r.days} 天 / days${r.days % 1 === 0 ? '' : ''}</td>
+                <td style="width:25%">${escapeHtml(r.reason || '-')}</td>
+                <td style="width:20%">${attachHtml}</td>
+            </tr>`;
         }).join('');
+        
         const requests = (await loadLeaveRequests()).filter(r => r.empId === updatedEmp.id).sort((a,b)=>new Date(b.createdAt)-new Date(a.createdAt));
         const requestRows = requests.map(req => {
             let statusText = '';
@@ -741,8 +734,14 @@
                 <h3>📋 我的休假记录 / My Leave Records</h3>
                 <div class="table-wrapper">
                     <table class="leave-table">
-                        <thead><tr><th style="width:35%">日期范围 / Date Range</th><th style="width:25%">类型 / Type</th><th style="width:20%">天数 / Days</th><th style="width:20%">附件 / Attachment</th></tr></thead>
-                        <tbody>${recordRows || '<tr><td colspan="4">暂无记录</td></tr>'}</tbody>
+                        <thead><tr>
+                            <th style="width:25%">日期范围 / Date Range</th>
+                            <th style="width:15%">类型 / Type</th>
+                            <th style="width:15%">天数 / Days</th>
+                            <th style="width:25%">理由 / Reason</th>
+                            <th style="width:20%">附件 / Attachment</th>
+                        </tr></thead>
+                        <tbody>${recordRows || '<tr><td colspan="5">暂无记录</td></tr>'}</tbody>
                     </table>
                 </div>
                 <h3 style="margin-top:24px;">📋 我的申请记录 / My Requests</h3>
@@ -759,7 +758,7 @@
         document.getElementById("openRequestModalBtn")?.addEventListener("click", () => openRequestModal(updatedEmp));
     }
 
-    // ===== 申请模态框 =====
+    // 申请模态框
     async function openRequestModal(emp) {
         const modal = document.createElement('div'); modal.className = 'modal';
         const today = new Date().toISOString().slice(0,10);
@@ -873,7 +872,7 @@
         win.document.close();
     }
 
-    // ===== 审批相关函数 =====
+    // 审批相关函数
     async function approveRequest(reqId, approverEmp) {
         let requests = await loadLeaveRequests();
         const req = requests.find(r => r.id === reqId);
@@ -881,7 +880,10 @@
         let recordType = req.type;
         if (req.type === 'other' && req.customLeaveType) recordType = req.customLeaveType;
         else if (req.type === 'urgent') recordType = 'urgent';
-        const newRecordId = await addLeaveRecord(req.empId, recordType, req.startDate, req.endDate, req.days, req.attachment, req.attachmentName);
+        
+        // ==================== 关键修改：把 req.reason 传给 addLeaveRecord ====================
+        const newRecordId = await addLeaveRecord(req.empId, recordType, req.startDate, req.endDate, req.days, req.attachment, req.attachmentName, req.reason);
+        
         req.status = "approved";
         req.approvedBy = approverEmp.id;
         req.approvedByName = approverEmp.name;
@@ -1004,6 +1006,7 @@
             <th style="width:10%">类型 / Type</th>
             <th style="width:12%">日期范围 / Date Range</th>
             <th style="width:6%">天数 / Days</th>
+            <th style="width:18%">理由 / Reason</th>
             <th style="width:8%">结果 / Result</th>
             <th style="width:10%">审批人 / Approver</th>
             <th style="width:16%">审批时间 / Approved At</th>
@@ -1026,6 +1029,7 @@
                 <td>${escapeHtml(typeDisplay)}</td>
                 <td>${req.startDate} ~ ${req.endDate}</td>
                 <td>${req.days}${req.days % 1 === 0 ? '' : ''}</td>
+                <td>${escapeHtml(req.reason)}</td>
                 <td>${result}</td>
                 <td>${req.approvedByName || '-'}</td>
                 <td>${approvedAtDisplay}</td>
@@ -1038,7 +1042,7 @@
         window.deleteRequest = deleteRequest;
     }
 
-    // ===== 管理员表格 =====
+    // 管理员表格
     async function renderAdminTable() {
         const emps = await loadEmployees();
         const headers = ["工号 / ID", "姓名 / Name", "部门 / Dept", "入职日期 / Start Date", "入职年份 / Start Year", "当年应得 / Current Year", "上年结转 / Carry-over", "年假总额 / Total Annual", "已休年假 / Annual Taken", "剩余年假 / Remaining Annual", "病假总额 / Sick Total", "已休病假 / Sick Taken", "剩余病假 / Remaining Sick", "育儿假总额 / Childcare Total", "已休育儿假 / Childcare Taken", "剩余育儿假 / Remaining Childcare", "本年无薪假 / Unpaid", "审批人", "操作 / Actions"];
@@ -1128,10 +1132,17 @@
                 else typeLabel = rec.type;
                 const attachHtml = rec.attachment ? `<a class="attachment-link" onclick="downloadAttachment('${rec.id}')">📎 附件</a>` : '';
                 const dateRange = (rec.startDate === rec.endDate) ? rec.startDate : `${rec.startDate} ~ ${rec.endDate}`;
-                return `<tr><td style="width:30%">${dateRange}</td><td style="width:20%">${typeLabel}</td><td style="width:15%">${rec.days}${rec.days % 1 === 0 ? '' : ''}</td><td style="width:20%">${attachHtml}</td><td style="width:15%"><button class="btn btn-primary btn-sm" onclick="openEditRecordModal('${rec.id}')">✏️ 编辑</button> <button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td></tr>`;
+                return `<tr>
+                    <td style="width:20%">${dateRange}</td>
+                    <td style="width:12%">${typeLabel}</td>
+                    <td style="width:10%">${rec.days}${rec.days % 1 === 0 ? '' : ''}</td>
+                    <td style="width:20%">${escapeHtml(rec.reason || '-')}</td>
+                    <td style="width:15%">${attachHtml}</td>
+                    <td style="width:23%"><button class="btn btn-primary btn-sm" onclick="openEditRecordModal('${rec.id}')">✏️ 编辑</button> <button class="btn btn-danger btn-sm" onclick="deleteRecord('${rec.id}')">删除</button></td>
+                </tr>`;
             }).join('');
             return `<h3>${emp.name} 的休假记录</h3>
-                <div class="table-wrapper"><table class="leave-table"><thead><tr><th style="width:30%">日期范围</th><th style="width:20%">类型</th><th style="width:15%">天数</th><th style="width:20%">附件</th><th style="width:15%">操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="5">暂无记录</td></tr>'}</tbody></table></div>
+                <div class="table-wrapper"><table class="leave-table"><thead><tr><th style="width:20%">日期范围</th><th style="width:12%">类型</th><th style="width:10%">天数</th><th style="width:20%">理由</th><th style="width:15%">附件</th><th style="width:23%">操作</th></tr></thead><tbody>${recHtml||'<tr><td colspan="6">暂无记录</td></tr>'}</tbody></table></div>
                 <div class="form-group"><label>添加记录</label><div style="display:flex; gap:8px; flex-wrap: wrap;">
                     <input type="date" id="newStartDate" placeholder="开始日期" style="flex:1; min-width: 120px;">
                     <input type="date" id="newEndDate" placeholder="结束日期" style="flex:1; min-width: 120px;">
@@ -1143,6 +1154,7 @@
                         <option value="other">其他</option>
                     </select>
                     <input type="number" id="newDays" step="0.5" placeholder="天数" style="flex:1; min-width: 100px;">
+                    <input type="text" id="newReason" placeholder="理由" style="flex:2; min-width: 150px;">
                     <button type="button" class="btn btn-sm" id="autoCalcDaysBtn" style="background:#f0f0f0;">📅 自动计算(周末规则)</button>
                     <input type="file" id="newAttachment" style="flex:2;">
                     <button class="btn btn-primary btn-sm" id="addRecordBtn">➕ 添加</button>
@@ -1169,6 +1181,7 @@
                         </select>
                     </div>
                     <div class="form-group"><label>天数 / Days</label><input type="number" id="editDays" step="0.5" value="${rec.days}"></div>
+                    <div class="form-group"><label>理由 / Reason</label><input type="text" id="editReason" value="${escapeHtml(rec.reason || '')}"></div>
                     <div class="form-group"><label>附件 / Attachment</label><input type="file" id="editAttachment"></div>
                     <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:20px;">
                         <button class="btn btn-secondary" id="closeEditModal">取消/Cancel</button>
@@ -1183,6 +1196,7 @@
                 const newEndDate = document.getElementById('editEndDate').value;
                 const newType = document.getElementById('editType').value;
                 let newDays = parseFloat(document.getElementById('editDays').value);
+                const newReason = document.getElementById('editReason').value;
                 const fileInput = document.getElementById('editAttachment');
                 let attachBase64 = null, attachName = null;
                 if (fileInput.files.length > 0) {
@@ -1198,7 +1212,7 @@
                     attachBase64 = rec.attachment;
                     attachName = rec.attachmentName;
                 }
-                await updateLeaveRecord(rec.id, empId, newType, newStartDate, newEndDate, newDays, attachBase64, attachName);
+                await updateLeaveRecord(rec.id, empId, newType, newStartDate, newEndDate, newDays, attachBase64, attachName, newReason);
                 editModal.remove();
                 await refreshModal();
             };
@@ -1215,6 +1229,7 @@
             const startDateInput = document.getElementById('newStartDate');
             const endDateInput = document.getElementById('newEndDate');
             const daysInput = document.getElementById('newDays');
+            const reasonInput = document.getElementById('newReason');
             const autoCalcBtn = document.getElementById('autoCalcDaysBtn');
             if (autoCalcBtn) autoCalcBtn.onclick = () => {
                 if (startDateInput.value && endDateInput.value) {
@@ -1225,11 +1240,12 @@
                 const startDate = startDateInput.value, endDate = endDateInput.value;
                 const type = document.getElementById('newType').value;
                 let days = parseFloat(daysInput.value);
+                const reason = reasonInput.value;
                 const fileInput = document.getElementById('newAttachment');
                 let attachBase64 = null, attachName = null;
                 if (fileInput.files.length > 0) { const f = fileInput.files[0]; attachName = f.name; attachBase64 = await readFileAsBase64(f); }
                 if(!startDate || !endDate || isNaN(days) || days<=0){ alert("请填写完整日期和正数天数"); return; }
-                await addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName);
+                await addLeaveRecord(empId, type, startDate, endDate, days, attachBase64, attachName, reason);
                 await refreshModal();
             });
             window.deleteRecord = async (recId) => {
@@ -1298,6 +1314,7 @@
             }
         };
     };
+    
     async function addEmployee() {
         const modal = document.createElement('div'); modal.className='modal';
         modal.innerHTML = `<div class="modal-content"><h3>新增员工</h3>
@@ -1340,7 +1357,7 @@
         };
     }
 
-    // ===== 导出 Excel =====
+    // 导出 Excel
     async function exportToExcel() {
         const emps = await loadEmployees();
         const curYear = new Date().getFullYear();
@@ -1374,7 +1391,7 @@
     async function exportLeaveDetails() {
         const emps = await loadEmployees();
         const records = await loadLeaveRecords();
-        const exportData = [["工号","姓名","部门","开始日期","结束日期","假期类型","天数","附件名称","记录创建时间"]];
+        const exportData = [["工号","姓名","部门","开始日期","结束日期","假期类型","天数","理由","附件名称","记录创建时间"]];
         for (let rec of records) {
             const emp = emps.find(e => e.id === rec.empId);
             const empName = emp ? emp.name : rec.empId;
@@ -1389,7 +1406,7 @@
             exportData.push([
                 rec.empId, empName, empDept,
                 rec.startDate || '', rec.endDate || '',
-                typeLabel, rec.days,
+                typeLabel, rec.days, rec.reason || '',
                 rec.attachmentName || '',
                 rec.createdAt || ''
             ]);
@@ -1431,11 +1448,11 @@
         for (const doc of allReqs.docs) await doc.ref.delete();
         for (let emp of fullList) await saveEmployee(emp);
         const sampleRecords = [
-            { id: genId(), empId: "182M", type: "annual", startDate: "2025-03-10", endDate: "2025-03-10", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "182M", type: "annual", startDate: "2025-07-20", endDate: "2025-07-20", days: 3, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-04-01", endDate: "2025-04-01", days: 4, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-09-15", endDate: "2025-09-15", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() },
-            { id: genId(), empId: "S1667227J", type: "sick", startDate: "2025-11-05", endDate: "2025-11-05", days: 2, attachment: null, attachmentName: null, createdAt: new Date().toISOString() }
+            { id: genId(), empId: "182M", type: "annual", startDate: "2025-03-10", endDate: "2025-03-10", days: 2, attachment: null, attachmentName: null, reason: "Personal Leave", createdAt: new Date().toISOString() },
+            { id: genId(), empId: "182M", type: "annual", startDate: "2025-07-20", endDate: "2025-07-20", days: 3, attachment: null, attachmentName: null, reason: "Family Trip", createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-04-01", endDate: "2025-04-01", days: 4, attachment: null, attachmentName: null, reason: "Rest", createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "annual", startDate: "2025-09-15", endDate: "2025-09-15", days: 2, attachment: null, attachmentName: null, reason: "Personal Errand", createdAt: new Date().toISOString() },
+            { id: genId(), empId: "S1667227J", type: "sick", startDate: "2025-11-05", endDate: "2025-11-05", days: 2, attachment: null, attachmentName: null, reason: "Fever", createdAt: new Date().toISOString() }
         ];
         for (let rec of sampleRecords) await leaveRecordsCollection.doc(rec.id).set(rec);
         alert("数据同步完成！");
