@@ -1559,11 +1559,7 @@
 
     (async function init() {
         await migrateOldLeaveRecords();
-        const emps = await loadEmployees();
-        if (emps.length < 19) {
-            console.log("检测到员工数据不足，自动同步完整数据...");
-            await syncFullEmployeeData();
-        } else await checkSession();
+        await checkSession(); 
     })();
 
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
