@@ -1555,16 +1555,25 @@
             return;
         }
         document.getElementById('loginView').classList.remove('hidden');
-        updateAllDates();
+        updateAllDates(); 
     }
+    
+    // 修复日期不见的问题，增加英文
     function updateAllDates() {
         const today = new Date();
-        const formatted = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+        const zhDate = `${today.getFullYear()}年${today.getMonth()+1}月${today.getDate()}日`;
+        const enDate = today.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); // e.g., "16 Nov 2026"
+        const formatted = `${zhDate} / ${enDate}`;
+        
         ['loginCurrentDate', 'empCurrentDate', 'approverCurrentDate', 'adminCurrentDate'].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.innerText = formatted;
         });
     }
+    
+    // 确保页面加载时日期立即显示，不受网络延迟影响
+    updateAllDates();
+
     window.downloadAttachment = async function(recordId) {
         const records = await loadLeaveRecords();
         const rec = records.find(r => r.id === recordId);
@@ -1579,8 +1588,15 @@
     };
 
     (async function init() {
-        await migrateOldLeaveRecords();
-        await checkSession(); 
+        try {
+            await migrateOldLeaveRecords();
+            await checkSession(); 
+        } catch (e) {
+            console.error("Init error:", e);
+            // 即使 Firebase 报错，也要保证登录界面能正常显示
+            document.getElementById('loginView').classList.remove('hidden');
+            updateAllDates();
+        }
     })();
 
     document.getElementById('doLoginBtn')?.addEventListener('click', handleLogin);
